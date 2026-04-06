@@ -1,7 +1,7 @@
 # FluxUI
 
 FluxUI 是一个专为 Minecraft (Bukkit/Paper) 设计的 2D 即时渲染模式 (Immediate Mode GUI, IMGUI) 界面渲染库。
-它基于 Minecraft 的 `TextDisplay` 实体与 JOML 矩阵运算，允许开发者在游戏世界中以极低的性能开销绘制出类似 Dear ImGui 的现代化控制面板。
+它基于 Minecraft 的 `TextDisplay` 实体与 JOML 矩阵运算，允许开发者在游戏世界中以低性能开销绘制出类似 Dear ImGui 的现代化控制面板。
 
 ## 特性
 
@@ -92,7 +92,7 @@ public class MyPlugin extends JavaPlugin implements Listener {
 }
 ```
 
-### 2. 编写渲染逻辑 (使用排版系统)
+### 2. 编写渲染逻辑
 
 借助全新的 Window 和 Layout 系统，你可以像写网页一样快速构建 UI，而不需要手动计算每个元素的 X/Y 坐标。
 
@@ -178,5 +178,5 @@ private void renderUI(Flux flux) {
 ## 注意事项
 
 1. **组件 ID 唯一性**：FluxUI 依赖传入的 `id` 字符串来追踪和复用底层实体。在同一个屏幕层级下，请确保每个组件的 ID 是唯一的（例如在循环中使用 `"item_" + index`）。
-2. **内存泄漏防范**：必须在玩家退出 (`PlayerQuitEvent`) 或插件卸载 (`onDisable`) 时调用 `flux.destroy()`。否则旧的实体将脱离插件控制并永久残留在世界中。
-3. **Z-Fighting (深度冲突)**：虽然系统内部实现了微调来自动处理同一平面上的深度冲突，但在手动使用矩阵嵌套结构时，仍建议使用 `flux.translate(0, 0, 0.01f)` 来明确图层的前后关系。
+2. **内存泄漏防范**：必须在玩家退出 (`PlayerQuitEvent`) 或插件卸载 (`onDisable`) 时调用 `flux.destroy()`。否则旧的实体将脱离插件控制并残留在世界中。
+3. **Z-Fighting (深度冲突)**：建议使用 `flux.translate(0, 0, 0.01f)` 来明确图层的前后关系。
