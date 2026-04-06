@@ -1,0 +1,8 @@
+name: FluxUI
+version: '1.0-SNAPSHOT'
+main: com.wiyuka.fluxUI.FluxUI
+api-version: '1.21'
+authors: [ wiyuka ]
+commands:
+  flux:
+
