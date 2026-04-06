@@ -176,6 +176,31 @@ private void renderUI(Flux flux) {
 * `text(id, text, scale, opacity, align)`: 绘制高度自定义的文本。
 * *(带有 `Abs` 后缀的方法如 `buttonAbs`, `drawAbsRect` 允许你无视 Layout 系统，直接在指定坐标绘制)*
 
+**Dear ImGui:**
+```cpp
+ImGui::Begin("Hello, world!");
+ImGui::Text("This is some useful text.");
+ImGui::Checkbox("Demo Window", &show_demo_window);
+ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
+if (ImGui::Button("Button")) counter++;
+ImGui::SameLine();
+ImGui::Text("counter = %d", counter);
+ImGui::End();
+```
+
+**FluxUI:**
+```java
+flux.beginWindow("Hello, world!", 0, 0);
+flux.text("txt_desc", "This is some useful text.");
+show_demo_window = flux.checkbox("chk_demo", "Demo Window", show_demo_window);
+f = flux.sliderFloat("sld_f", "float", f, 0.0f, 1.0f);
+if (flux.button("btn_counter", "Button")) counter++;
+flux.sameLine();
+flux.text("txt_cnt", "counter = " + counter);
+flux.endWindow();
+```
+
+
 ## 注意事项
 
 1. **组件 ID 唯一性**：FluxUI 依赖传入的 `id` 字符串来追踪和复用底层实体。在同一个屏幕层级下，请确保每个组件的 ID 是唯一的（例如在循环中使用 `"item_" + index`）。
