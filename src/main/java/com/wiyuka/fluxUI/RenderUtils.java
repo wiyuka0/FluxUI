@@ -1,10 +1,27 @@
 package com.wiyuka.fluxUI;
 
 import com.wiyuka.fluxUI.renderer.Flux;
+import com.wiyuka.fluxUI.renderer.Flux.FluxColor;
 import org.bukkit.Color;
+import org.joml.Vector3d;
 import org.joml.Vector3f;
 
 public class RenderUtils {
+
+    // ==========================================
+    // 内部转换工具
+    // ==========================================
+    private static FluxColor toFC(Color color) {
+        return FluxColor.fromARGB(color.getAlpha(), color.getRed(), color.getGreen(), color.getBlue());
+    }
+
+    private static Vector3d toV3d(Vector3f v) {
+        return new Vector3d(v.x, v.y, v.z);
+    }
+
+    // ==========================================
+    // 渲染工具方法 (传参保持不变)
+    // ==========================================
 
     public static void drawBox(String id, float w, float h, float d, Color color, Flux flux) {
         float hw = w / 2, hh = h / 2, hd = d / 2;
@@ -12,45 +29,46 @@ public class RenderUtils {
 
         flux.pushMatrix();
         flux.translate(-hw, -hh, hd);
-        flux.rect(id + "_front", w, h, frontC);
+        flux.rect(id + "_front", w, h, toFC(frontC));
         flux.popMatrix();
 
         flux.pushMatrix();
         flux.translate(hw, -hh, -hd);
         flux.rotateY(180);
-        flux.rect(id + "_back", w, h, frontC);
+        flux.rect(id + "_back", w, h, toFC(frontC));
         flux.popMatrix();
 
         flux.pushMatrix();
         flux.translate(-hw, hh, hd);
         flux.rotateX(-90);
-        flux.rect(id + "_top", w, d, color);
+        flux.rect(id + "_top", w, d, toFC(color));
         flux.popMatrix();
 
         flux.pushMatrix();
         flux.translate(-hw, -hh, -hd);
         flux.rotateX(90);
-        flux.rect(id + "_bottom", w, d, botC);
+        flux.rect(id + "_bottom", w, d, toFC(botC));
         flux.popMatrix();
 
         flux.pushMatrix();
         flux.translate(hw, -hh, hd);
         flux.rotateY(90);
-        flux.rect(id + "_right", d, h, sideC);
+        flux.rect(id + "_right", d, h, toFC(sideC));
         flux.popMatrix();
 
         flux.pushMatrix();
         flux.translate(-hw, -hh, -hd);
         flux.rotateY(-90);
-        flux.rect(id + "_left", d, h, sideC);
+        flux.rect(id + "_left", d, h, toFC(sideC));
         flux.popMatrix();
     }
 
     public static void drawQuad(String id, Vector3f p1, Vector3f p2, Vector3f p3, Vector3f p4, Color color, Flux flux) {
-        flux.triangle(id + "_f1", p1, p2, p3, color);
-        flux.triangle(id + "_f2", p1, p3, p4, color);
-        flux.triangle(id + "_b1", p1, p3, p2, color);
-        flux.triangle(id + "_b2", p1, p4, p3, color);
+        FluxColor fc = toFC(color);
+        flux.triangle(id + "_f1", toV3d(p1), toV3d(p2), toV3d(p3), fc);
+        flux.triangle(id + "_f2", toV3d(p1), toV3d(p3), toV3d(p4), fc);
+        flux.triangle(id + "_b1", toV3d(p1), toV3d(p3), toV3d(p2), fc);
+        flux.triangle(id + "_b2", toV3d(p1), toV3d(p4), toV3d(p3), fc);
     }
 
     public static Color lerpColor(Color c1, Color c2, float t) {
@@ -94,8 +112,11 @@ public class RenderUtils {
         Vector3f top = new Vector3f(length * 0.3f, width / 2, 0);
         Vector3f bottom = new Vector3f(length * 0.3f, -width / 2, 0);
 
-        flux.triangle(id + "_f1", root, bottom, top, color); flux.triangle(id + "_b1", root, top, bottom, color);
-        flux.triangle(id + "_f2", top, bottom, tip, color);  flux.triangle(id + "_b2", top, tip, bottom, color);
+        FluxColor fc = toFC(color);
+        flux.triangle(id + "_f1", toV3d(root), toV3d(bottom), toV3d(top), fc);
+        flux.triangle(id + "_b1", toV3d(root), toV3d(top), toV3d(bottom), fc);
+        flux.triangle(id + "_f2", toV3d(top), toV3d(bottom), toV3d(tip), fc);
+        flux.triangle(id + "_b2", toV3d(top), toV3d(tip), toV3d(bottom), fc);
     }
 
     public static void drawOctahedron(String id, float w, float h, Color color, Flux flux) {
@@ -113,20 +134,26 @@ public class RenderUtils {
 
     public static void drawFlatRing(String id, float innerRadius, float outerRadius, int segments, Color color, Flux flux) {
         float angleStep = (float) (2 * Math.PI / segments);
+        FluxColor fc = toFC(color);
+
         for (int i = 0; i < segments; i++) {
             float a1 = i * angleStep, a2 = (i + 1) * angleStep;
             Vector3f p1 = new Vector3f((float) Math.cos(a1) * innerRadius, (float) Math.sin(a1) * innerRadius, 0);
             Vector3f p2 = new Vector3f((float) Math.cos(a2) * innerRadius, (float) Math.sin(a2) * innerRadius, 0);
             Vector3f p3 = new Vector3f((float) Math.cos(a1) * outerRadius, (float) Math.sin(a1) * outerRadius, 0);
             Vector3f p4 = new Vector3f((float) Math.cos(a2) * outerRadius, (float) Math.sin(a2) * outerRadius, 0);
-            flux.triangle(id + "_f1_" + i, p1, p3, p4, color); flux.triangle(id + "_b1_" + i, p1, p4, p3, color);
-            flux.triangle(id + "_f2_" + i, p1, p4, p2, color); flux.triangle(id + "_b2_" + i, p1, p2, p4, color);
+
+            flux.triangle(id + "_f1_" + i, toV3d(p1), toV3d(p3), toV3d(p4), fc);
+            flux.triangle(id + "_b1_" + i, toV3d(p1), toV3d(p4), toV3d(p3), fc);
+            flux.triangle(id + "_f2_" + i, toV3d(p1), toV3d(p4), toV3d(p2), fc);
+            flux.triangle(id + "_b2_" + i, toV3d(p1), toV3d(p2), toV3d(p4), fc);
         }
     }
 
     private static void drawDoubleSidedTriangle(String id, Vector3f p1, Vector3f p2, Vector3f p3, Color color, Flux flux) {
-        flux.triangle(id + "_front", p1, p2, p3, color);
-        flux.triangle(id + "_back", p1, p3, p2, color);
+        FluxColor fc = toFC(color);
+        flux.triangle(id + "_front", toV3d(p1), toV3d(p2), toV3d(p3), fc);
+        flux.triangle(id + "_back", toV3d(p1), toV3d(p3), toV3d(p2), fc);
     }
 
     public static Color darken(Color color, double factor) {

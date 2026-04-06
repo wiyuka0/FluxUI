@@ -32,7 +32,7 @@ public class FluxLogoEffect extends BaseEffect {
 
         float floatY = (float) Math.sin(t * 0.05) * 0.4f;
 
-        flux.screen(centerLoc, xAxis, yAxis, zAxis, "flux_logo_main");
+        flux.screen(FluxUtil.locationToFlux(centerLoc), toVector3d(xAxis), toVector3d(yAxis), toVector3d(zAxis), "flux_logo_main");
         flux.translate(0, floatY, 0);
 
         float ringRadius = 4.5f;

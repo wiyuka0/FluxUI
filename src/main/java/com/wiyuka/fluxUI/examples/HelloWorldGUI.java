@@ -58,7 +58,7 @@ public class HelloWorldGUI extends BaseEffect implements Listener {
         float deltaTime = (now - lastFrameTime) / 1000.0f;
         lastFrameTime = now;
         if (deltaTime > 0) fps = fps * 0.9f + (1.0f / deltaTime) * 0.1f;
-        flux.screen(centerLoc, xAxis, yAxis, zAxis, "imgui_hello_world_screen");
+        flux.screen(FluxUtil.locationToFlux(centerLoc), toVector3d(xAxis), toVector3d(yAxis), toVector3d(zAxis), "imgui_hello_world_screen");
         flux.pushMatrix();
         flux.translate(-2.0f, 1.5f, 0f);
         flux.beginWindow("Hello, world!", 0, 0);
@@ -66,7 +66,7 @@ public class HelloWorldGUI extends BaseEffect implements Listener {
         show_demo_window = flux.checkbox("chk_demo", "Demo Window", show_demo_window);
         show_another_window = flux.checkbox("chk_another", "Another Window", show_another_window);
         f = flux.sliderFloat("sld_f", "float", f, 0.0f, 1.0f);
-        flux.colorEdit3("col_clear", "clear color", clear_color);
+        flux.colorEdit3("col_clear", "clear color", new Flux.FluxColor(clear_color.getAlpha(), clear_color.getRed(), clear_color.getGreen(), clear_color.getBlue()));
         if (flux.button("btn_counter", "Button")) counter++;
         flux.sameLine();
         flux.text("txt_cnt", "counter = " + counter);

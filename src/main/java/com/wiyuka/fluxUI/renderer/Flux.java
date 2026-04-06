@@ -1,19 +1,54 @@
 package com.wiyuka.fluxUI.renderer;
 
-import org.bukkit.Bukkit;
-import org.bukkit.Color;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.TextDisplay;
-import org.joml.Matrix4f;
-import org.joml.Quaternionf;
+import org.joml.Matrix4d;
+import org.joml.Quaterniond;
 import org.joml.Vector2f;
-import org.joml.Vector3f;
+import org.joml.Vector3d;
 
 import java.util.*;
 import java.util.function.Consumer;
 
 public class Flux {
+
+    // ==========================================
+    // 解耦引入的通用数据结构 (替代 Bukkit API)
+    // ==========================================
+
+    public static class FluxColor {
+        public final int a, r, g, b;
+        public FluxColor(int a, int r, int g, int b) {
+            this.a = a; this.r = r; this.g = g; this.b = b;
+        }
+        public static FluxColor fromARGB(int a, int r, int g, int b) {
+            return new FluxColor(a, r, g, b);
+        }
+    }
+
+    public static class FluxLocation {
+        public final String world;
+        public final double x, y, z;
+
+        public FluxLocation(String world, double x, double y, double z) {
+            this.world = world; this.x = x; this.y = y; this.z = z;
+        }
+
+        public double distanceSquared(FluxLocation other) {
+            if (!this.world.equals(other.world)) return Double.MAX_VALUE;
+            double dx = this.x - other.x;
+            double dy = this.y - other.y;
+            double dz = this.z - other.z;
+            return dx * dx + dy * dy + dz * dz;
+        }
+    }
+
+    public enum FluxTextAlignment {
+        LEFT, CENTER, RIGHT
+    }
+
+    // ==========================================
+    // 内部系统
+    // ==========================================
+
     private static class FluxLayout {
         private final FluxRenderer layoutFlux;
 
@@ -41,11 +76,11 @@ public class Flux {
 
         private final float layoutTEXT_WIDTH_RATIO = 0.028f;
 
-        public final Color layoutColWindowBg = Color.fromARGB(240, 15, 15, 15);
-        public final Color layoutColTitleBg = Color.fromARGB(255, 45, 60, 90);
-        public final Color layoutColFrameBg = Color.fromARGB(255, 30, 45, 70);
-        public final Color layoutColSliderGrab = Color.fromARGB(255, 66, 150, 250);
-        public final Color layoutColButton = Color.fromARGB(255, 41, 74, 122);
+        public final FluxColor layoutColWindowBg = FluxColor.fromARGB(240, 15, 15, 15);
+        public final FluxColor layoutColTitleBg = FluxColor.fromARGB(255, 45, 60, 90);
+        public final FluxColor layoutColFrameBg = FluxColor.fromARGB(255, 30, 45, 70);
+        public final FluxColor layoutColSliderGrab = FluxColor.fromARGB(255, 66, 150, 250);
+        public final FluxColor layoutColButton = FluxColor.fromARGB(255, 41, 74, 122);
 
         public FluxLayout(FluxRenderer layoutFlux) {
             this.layoutFlux = layoutFlux;
@@ -112,11 +147,11 @@ public class Flux {
 
         public void layoutDrawTextLeft(String id, String text, float absLeftX, float absCenterY, float scale) {
             float textWidth = layoutCalcTextWidth(text, scale);
-            layoutFlux.renderer_textAbs(id, text, absLeftX + textWidth / 2f, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, TextDisplay.TextAlignment.CENTER);
+            layoutFlux.renderer_textAbs(id, text, absLeftX + textWidth / 2f, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, FluxTextAlignment.CENTER);
         }
 
         public void layoutDrawTextCenter(String id, String text, float absCenterX, float absCenterY, float scale) {
-            layoutFlux.renderer_textAbs(id, text, absCenterX, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, TextDisplay.TextAlignment.CENTER);
+            layoutFlux.renderer_textAbs(id, text, absCenterX, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, FluxTextAlignment.CENTER);
         }
 
         public float layoutCalcTextWidth(String text, float scale) {
@@ -174,14 +209,15 @@ public class Flux {
             return pixels * layoutTEXT_WIDTH_RATIO * scale;
         }
     }
+
     private static class FluxRenderer {
         private final Map<String, UIPool> renderer_activeScreens = new HashMap<>();
-        private final Map<String, Location> renderer_screenLocations = new HashMap<>();
+        private final Map<String, FluxLocation> renderer_screenLocations = new HashMap<>();
         private final Set<String> renderer_screensRenderedThisTick = new HashSet<>();
 
         private UIPool renderer_currentPool;
         private final Deque<String> renderer_idStack = new ArrayDeque<>();
-        private final Deque<Matrix4f> renderer_matrixStack = new ArrayDeque<>();
+        private final Deque<Matrix4d> renderer_matrixStack = new ArrayDeque<>();
 
         private int renderer_currentInterpTicks = 0;
         private float renderer_microZOffset = 0.0f;
@@ -189,11 +225,11 @@ public class Flux {
         private static final float renderer_MAX_INTERACT_DISTANCE = 10.0f;
 
         private final Consumer<FluxRenderer> renderer_renderLogic;
-        private Vector3f renderer_currentAnchor = null;
+        private Vector3d renderer_currentAnchor = null;
 
         private static class RendererInputState {
-            Vector3f renderer_rayOrigin;
-            Vector3f renderer_rayDir;
+            Vector3d renderer_rayOrigin;
+            Vector3d renderer_rayDir;
             boolean renderer_clicking;
         }
         private final Map<UUID, RendererInputState> renderer_playerInputs = new HashMap<>();
@@ -251,24 +287,23 @@ public class Flux {
             });
         }
 
-        public void renderer_updatePlayerRay(Player player) {
-            if (player == null || !player.isOnline()) return;
-            Location eyeLoc = player.getEyeLocation();
-            RendererInputState state = renderer_playerInputs.computeIfAbsent(player.getUniqueId(), k -> new RendererInputState());
-            state.renderer_rayOrigin = new Vector3f((float) eyeLoc.getX(), (float) eyeLoc.getY(), (float) eyeLoc.getZ());
-            state.renderer_rayDir = new Vector3f((float) eyeLoc.getDirection().getX(), (float) eyeLoc.getDirection().getY(), (float) eyeLoc.getDirection().getZ());
+        public void renderer_updatePlayerRay(UUID playerId, Vector3d origin, Vector3d direction) {
+            if (playerId == null) return;
+            RendererInputState state = renderer_playerInputs.computeIfAbsent(playerId, k -> new RendererInputState());
+            state.renderer_rayOrigin = origin;
+            state.renderer_rayDir = direction;
         }
 
-        public void renderer_registerPlayerClick(Player player) {
-            if (player == null) return;
-            RendererInputState state = renderer_playerInputs.get(player.getUniqueId());
+        public void renderer_registerPlayerClick(UUID playerId) {
+            if (playerId == null) return;
+            RendererInputState state = renderer_playerInputs.get(playerId);
             if (state != null) {
                 state.renderer_clicking = true;
             }
         }
 
-        public void renderer_removePlayer(Player player) {
-            if (player != null) renderer_playerInputs.remove(player.getUniqueId());
+        public void renderer_removePlayer(UUID playerId) {
+            if (playerId != null) renderer_playerInputs.remove(playerId);
         }
 
         private void renderer_consumeClicks() {
@@ -284,36 +319,36 @@ public class Flux {
             if (!renderer_idStack.isEmpty()) renderer_idStack.pop();
         }
 
-        public boolean renderer_screen(Location loc, Vector3f xAxis, Vector3f yAxis, Vector3f zAxis, String screenId) {
+        public boolean renderer_screen(FluxLocation loc, Vector3d xAxis, Vector3d yAxis, Vector3d zAxis, String screenId) {
             renderer_idStack.clear();
             renderer_matrixStack.clear();
 
             renderer_idStack.push(screenId);
-            Location originalLoc = renderer_screenLocations.get(screenId);
+            FluxLocation originalLoc = renderer_screenLocations.get(screenId);
 
-            if (originalLoc == null || originalLoc.getWorld() != loc.getWorld() || originalLoc.distanceSquared(loc) > 4096.0) {
+            if (originalLoc == null || !originalLoc.world.equals(loc.world) || originalLoc.distanceSquared(loc) > 4096.0f) {
                 if (originalLoc != null) {
                     UIPool oldPool = renderer_activeScreens.remove(screenId);
                     if (oldPool != null) oldPool.destroy();
                 }
-                originalLoc = loc.clone();
+                originalLoc = new FluxLocation(loc.world, loc.x, loc.y, loc.z);
                 renderer_screenLocations.put(screenId, originalLoc);
                 renderer_activeScreens.put(screenId, new UIPool(originalLoc));
             }
-            renderer_currentAnchor = new Vector3f((float) originalLoc.getX(), (float) originalLoc.getY(), (float) originalLoc.getZ());
+            renderer_currentAnchor = new Vector3d(originalLoc.x, originalLoc.y, originalLoc.z);
 
             UIPool pool = renderer_activeScreens.get(screenId);
             renderer_screensRenderedThisTick.add(screenId);
             renderer_currentPool = pool;
 
-            Vector3f delta = new Vector3f(
-                    (float) (loc.getX() - originalLoc.getX()),
-                    (float) (loc.getY() - originalLoc.getY()),
-                    (float) (loc.getZ() - originalLoc.getZ())
+            Vector3d delta = new Vector3d(
+                    loc.x - originalLoc.x,
+                    loc.y - originalLoc.y,
+                    loc.z - originalLoc.z
             );
 
-            Quaternionf rotation = new Quaternionf().lookAlong(new Vector3f(zAxis).mul(-1f), yAxis).conjugate();
-            Matrix4f baseTransform = new Matrix4f().translate(delta).rotate(rotation);
+            Quaterniond rotation = new Quaterniond().lookAlong(new Vector3d(zAxis).mul(-1f), yAxis).conjugate();
+            Matrix4d baseTransform = new Matrix4d().translate(delta).rotate(rotation);
 
             renderer_matrixStack.push(baseTransform);
             renderer_microZOffset = 0.0f;
@@ -330,7 +365,7 @@ public class Flux {
         public void renderer_rotateZ(float angleDegrees) { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.peek().rotateZ((float) Math.toRadians(angleDegrees)); }
         public void renderer_rotateX(float angleDegrees) { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.peek().rotateX((float) Math.toRadians(angleDegrees)); }
         public void renderer_rotateY(float angleDegrees) { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.peek().rotateY((float) Math.toRadians(angleDegrees)); }
-        public void renderer_pushMatrix() { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.push(new Matrix4f(renderer_matrixStack.peek())); }
+        public void renderer_pushMatrix() { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.push(new Matrix4d(renderer_matrixStack.peek())); }
         public void renderer_popMatrix() { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.pop(); }
         public void renderer_translate(float x, float y, float z) { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.peek().translate(x, y, z); }
         public void renderer_scale(float x, float y, float z) { if (!renderer_matrixStack.isEmpty()) renderer_matrixStack.peek().scale(x, y, z); }
@@ -340,7 +375,7 @@ public class Flux {
             float tanX = (float) Math.tan(Math.toRadians(angleX));
             float tanY = (float) Math.tan(Math.toRadians(angleY));
 
-            Matrix4f shearMat = new Matrix4f(
+            Matrix4d shearMat = new Matrix4d(
                     1f,   tanY, 0f, 0f,
                     tanX, 1f,   0f, 0f,
                     0f,   0f,   1f, 0f,
@@ -350,20 +385,20 @@ public class Flux {
             renderer_matrixStack.peek().mul(shearMat);
         }
 
-        public void renderer_drawAbsRect(String id, float x, float y, float w, float h, Color color) {
+        public void renderer_drawAbsRect(String id, float x, float y, float w, float h, FluxColor color) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Matrix4f localTransform = new Matrix4f().translate(x, y - h, safeZ).scale(w, h, 1f);
-            Matrix4f finalWorldMatrix = new Matrix4f(renderer_matrixStack.peek()).mul(localTransform);
+            Matrix4d localTransform = new Matrix4d().translate(x, y - h, safeZ).scale(w, h, 1f);
+            Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
             renderer_currentPool.drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
         }
 
-        public void renderer_drawAbsTriangle(String id, float x1, float y1, float x2, float y2, float x3, float y3, Color color) {
+        public void renderer_drawAbsTriangle(String id, float x1, float y1, float x2, float y2, float x3, float y3, FluxColor color) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Vector3f p1 = new Vector3f(x1, y1, safeZ);
-            Vector3f p2 = new Vector3f(x2, y2, safeZ);
-            Vector3f p3 = new Vector3f(x3, y3, safeZ);
+            Vector3d p1 = new Vector3d(x1, y1, safeZ);
+            Vector3d p2 = new Vector3d(x2, y2, safeZ);
+            Vector3d p3 = new Vector3d(x3, y3, safeZ);
             renderer_currentPool.drawTriangle(renderer_genFullId(id), p1, p2, p3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
         }
 
@@ -372,99 +407,92 @@ public class Flux {
         public void renderer_text(String id, String text, float scale, int opacity) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Matrix4f localTransform = new Matrix4f().translate(0, 0, safeZ).scale(scale, scale, scale);
-            Matrix4f finalWorldMatrix = new Matrix4f(renderer_matrixStack.peek()).mul(localTransform);
+            Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(scale, scale, scale);
+            Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
             renderer_currentPool.drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks);
         }
 
-        public void renderer_text(String id, String text, float scale, int opacity, TextDisplay.TextAlignment alignment) {
+        public void renderer_text(String id, String text, float scale, int opacity, FluxTextAlignment alignment) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Matrix4f localTransform = new Matrix4f().translate(0, 0, safeZ).scale(scale, scale, scale);
-            Matrix4f finalWorldMatrix = new Matrix4f(renderer_matrixStack.peek()).mul(localTransform);
+            Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(scale, scale, scale);
+            Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
             renderer_currentPool.drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, alignment);
         }
 
-        public void renderer_textAbs(String id, String text, float x, float y, float scale, int opacity, TextDisplay.TextAlignment align) {
+        public void renderer_textAbs(String id, String text, float x, float y, float scale, int opacity, FluxTextAlignment align) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Matrix4f localTransform = new Matrix4f().translate(x, y, safeZ).scale(scale, scale, scale);
-            Matrix4f finalWorldMatrix = new Matrix4f(renderer_matrixStack.peek()).mul(localTransform);
+            Matrix4d localTransform = new Matrix4d().translate(x, y, safeZ).scale(scale, scale, scale);
+            Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
             renderer_currentPool.drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, align);
         }
 
-        public void renderer_rect(String id, float width, float height, Color color) {
+        public void renderer_rect(String id, float width, float height, FluxColor color) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Matrix4f localTransform = new Matrix4f().translate(0, 0, safeZ).scale(width, height, 1f);
-            Matrix4f finalWorldMatrix = new Matrix4f(renderer_matrixStack.peek()).mul(localTransform);
+            Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(width, height, 1f);
+            Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
             renderer_currentPool.drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
         }
 
-        public void renderer_triangle(String id, Vector3f p1, Vector3f p2, Vector3f p3, Color color) {
+        public void renderer_triangle(String id, Vector3d p1, Vector3d p2, Vector3d p3, FluxColor color) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
-            Vector3f op1 = new Vector3f(p1).add(0, 0, safeZ);
-            Vector3f op2 = new Vector3f(p2).add(0, 0, safeZ);
-            Vector3f op3 = new Vector3f(p3).add(0, 0, safeZ);
+            Vector3d op1 = new Vector3d(p1).add(0, 0, safeZ);
+            Vector3d op2 = new Vector3d(p2).add(0, 0, safeZ);
+            Vector3d op3 = new Vector3d(p3).add(0, 0, safeZ);
             renderer_currentPool.drawTriangle(renderer_genFullId(id), op1, op2, op3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
         }
 
-        public Set<Player> renderer_getHoveringPlayers(float width, float height) {
-            Set<Player> hoveredPlayers = new HashSet<>();
+        public Set<UUID> renderer_getHoveringPlayers(float width, float height) {
+            Set<UUID> hoveredPlayers = new HashSet<>();
             if (renderer_matrixStack.isEmpty() || renderer_currentAnchor == null) return hoveredPlayers;
 
-            Matrix4f currentTransform = renderer_matrixStack.peek();
-            Matrix4f inverseMatrix = new Matrix4f(currentTransform).invertAffine();
+            Matrix4d currentTransform = renderer_matrixStack.peek();
+            Matrix4d inverseMatrix = new Matrix4d(currentTransform).invertAffine();
 
-            Iterator<Map.Entry<UUID, RendererInputState>> it = renderer_playerInputs.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<UUID, RendererInputState> entry = it.next();
-                Player player = Bukkit.getPlayer(entry.getKey());
-
-                if (player == null || !player.isOnline()) {
-                    it.remove();
-                    continue;
-                }
-
+            for (Map.Entry<UUID, RendererInputState> entry : renderer_playerInputs.entrySet()) {
+                UUID playerId = entry.getKey();
                 RendererInputState input = entry.getValue();
+
                 if (input.renderer_rayOrigin == null || input.renderer_rayDir == null) continue;
 
-                Vector3f relativeRayOrigin = new Vector3f(input.renderer_rayOrigin).sub(renderer_currentAnchor);
-                Vector3f localOrigin = relativeRayOrigin.mulPosition(inverseMatrix, new Vector3f());
-                Vector3f localDir = input.renderer_rayDir.mulDirection(inverseMatrix, new Vector3f());
+                Vector3d relativeRayOrigin = new Vector3d(input.renderer_rayOrigin).sub(renderer_currentAnchor);
+                Vector3d localOrigin = relativeRayOrigin.mulPosition(inverseMatrix, new Vector3d());
+                Vector3d localDir = input.renderer_rayDir.mulDirection(inverseMatrix, new Vector3d());
 
                 if (!(Math.abs(localDir.z) > 1e-6f)) continue;
-                float t = -localOrigin.z / localDir.z;
+                float t = (float) (-localOrigin.z / localDir.z);
                 if (!(t > 0)) continue;
 
-                Vector3f localHitPoint = new Vector3f(localDir).mul(t).add(localOrigin);
+                Vector3d localHitPoint = new Vector3d(localDir).mul(t).add(localOrigin);
 
                 if (localHitPoint.x >= 0 && localHitPoint.x <= width && localHitPoint.y >= 0 && localHitPoint.y <= height) {
-                    Vector3f relativeHitPoint = localHitPoint.mulPosition(currentTransform, new Vector3f());
-                    float distanceSq = relativeHitPoint.distanceSquared(relativeRayOrigin);
+                    Vector3d relativeHitPoint = localHitPoint.mulPosition(currentTransform, new Vector3d());
+                    float distanceSq = (float) relativeHitPoint.distanceSquared(relativeRayOrigin);
                     if (distanceSq <= renderer_MAX_INTERACT_DISTANCE * renderer_MAX_INTERACT_DISTANCE) {
-                        hoveredPlayers.add(player);
+                        hoveredPlayers.add(playerId);
                     }
                 }
             }
             return hoveredPlayers;
         }
 
-        public boolean renderer_isHovered(Player player, float width, float height) {
-            if (player == null) return false;
-            return renderer_getHoveringPlayers(width, height).contains(player);
+        public boolean renderer_isHovered(UUID playerId, float width, float height) {
+            if (playerId == null) return false;
+            return renderer_getHoveringPlayers(width, height).contains(playerId);
         }
 
         public boolean renderer_isHovered(float width, float height) {
             return !renderer_getHoveringPlayers(width, height).isEmpty();
         }
 
-        public Set<Player> renderer_hitbox(float width, float height) {
-            Set<Player> hovering = renderer_getHoveringPlayers(width, height);
-            Set<Player> clicking = new HashSet<>();
-            for (Player p : hovering) {
-                RendererInputState state = renderer_playerInputs.get(p.getUniqueId());
+        public Set<UUID> renderer_hitbox(float width, float height) {
+            Set<UUID> hovering = renderer_getHoveringPlayers(width, height);
+            Set<UUID> clicking = new HashSet<>();
+            for (UUID p : hovering) {
+                RendererInputState state = renderer_playerInputs.get(p);
                 if (state != null && state.renderer_clicking) {
                     clicking.add(p);
                 }
@@ -485,19 +513,20 @@ public class Flux {
             return z;
         }
     }
+
     private static class FluxControllers {
         private final FluxRenderer controllerFlux;
         private final FluxLayout controllerLayout;
-        private Player controllerPlayer;
+        private UUID controllerPlayerId;
 
-        public FluxControllers(FluxRenderer controllerFlux, FluxLayout controllerLayout, Player controllerPlayer) {
+        public FluxControllers(FluxRenderer controllerFlux, FluxLayout controllerLayout, UUID controllerPlayerId) {
             this.controllerFlux = controllerFlux;
             this.controllerLayout = controllerLayout;
-            this.controllerPlayer = controllerPlayer;
+            this.controllerPlayerId = controllerPlayerId;
         }
 
-        public void controllerSetPlayer(Player player) {
-            this.controllerPlayer = player;
+        public void controllerSetPlayer(UUID playerId) {
+            this.controllerPlayerId = playerId;
         }
 
         public void controllerText(String id, String text) {
@@ -518,11 +547,11 @@ public class Flux {
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
 
-            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayer, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
-            Color hoverOverlay = isHovered ? Color.fromARGB(50, 255, 255, 255) : Color.fromARGB(0, 0, 0, 0);
+            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
+            FluxColor hoverOverlay = isHovered ? FluxColor.fromARGB(50, 255, 255, 255) : FluxColor.fromARGB(0, 0, 0, 0);
             controllerFlux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay);
 
-            boolean clicked = controllerFlux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(controllerPlayer);
+            boolean clicked = controllerFlux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(controllerPlayerId);
             controllerFlux.renderer_popMatrix();
 
             return clicked;
@@ -537,13 +566,13 @@ public class Flux {
             controllerFlux.renderer_translate(x, y, 0);
 
             controllerFlux.renderer_rect(id + "_bg", width, height, controllerLayout.layoutColButton);
-            controllerFlux.renderer_textAbs(id + "_txt", text, width / 2f, -height / 2f, controllerLayout.layoutTEXT_SCALE, 255, TextDisplay.TextAlignment.CENTER);
+            controllerFlux.renderer_textAbs(id + "_txt", text, width / 2f, -height / 2f, controllerLayout.layoutTEXT_SCALE, 255, FluxTextAlignment.CENTER);
 
-            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayer, width, height);
+            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, width, height);
             if (isHovered) {
-                controllerFlux.renderer_rect(id + "_hover", width, height, Color.fromARGB(50, 255, 255, 255));
+                controllerFlux.renderer_rect(id + "_hover", width, height, FluxColor.fromARGB(50, 255, 255, 255));
             }
-            boolean clicked = controllerFlux.renderer_hitbox(width, height).contains(controllerPlayer);
+            boolean clicked = controllerFlux.renderer_hitbox(width, height).contains(controllerPlayerId);
 
             controllerFlux.renderer_popMatrix();
             return clicked;
@@ -563,13 +592,14 @@ public class Flux {
             controllerLayout.layoutDrawTextLeft(id + "_txt", label, x + boxSize + controllerLayout.layoutITEM_SPACING.x, y - height / 2f, controllerLayout.layoutTEXT_SCALE);
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(x, y - height, 0);
-            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayer, totalWidth, height);
-            Color hoverOverlay = isHovered ? Color.fromARGB(30, 255, 255, 255) : Color.fromARGB(0, 0, 0, 0);
+            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, totalWidth, height);
+            FluxColor hoverOverlay = isHovered ? FluxColor.fromARGB(30, 255, 255, 255) : FluxColor.fromARGB(0, 0, 0, 0);
             controllerFlux.renderer_rect(id + "_hover", totalWidth, height, hoverOverlay);
-            if (controllerFlux.renderer_hitbox(totalWidth, height).contains(controllerPlayer)) state = !state;
+            if (controllerFlux.renderer_hitbox(totalWidth, height).contains(controllerPlayerId)) state = !state;
             controllerFlux.renderer_popMatrix();
             return state;
         }
+
         public float ControllerSliderFloatAbs(String id, String label, float value, float min, float max, float x, float y) {
             float trackW = 2.5f;
             float height = controllerLayout.layoutFRAME_HEIGHT;
@@ -588,22 +618,23 @@ public class Flux {
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(x, y - height, 0);
 
-            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayer, trackW, height);
+            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, trackW, height);
             if (isHovered) {
-                controllerFlux.renderer_rect(id + "_hover", trackW, height, Color.fromARGB(30, 255, 255, 255));
+                controllerFlux.renderer_rect(id + "_hover", trackW, height, FluxColor.fromARGB(30, 255, 255, 255));
             }
-            if (controllerFlux.renderer_hitbox(trackW / 2, height).contains(controllerPlayer)) {
+            if (controllerFlux.renderer_hitbox(trackW / 2, height).contains(controllerPlayerId)) {
                 value = Math.max(min, value - (max - min) * 0.05f);
             }
 
             controllerFlux.renderer_translate(trackW / 2, 0, 0);
-            if (controllerFlux.renderer_hitbox(trackW / 2, height).contains(controllerPlayer)) {
+            if (controllerFlux.renderer_hitbox(trackW / 2, height).contains(controllerPlayerId)) {
                 value = Math.min(max, value + (max - min) * 0.05f);
             }
 
             controllerFlux.renderer_popMatrix();
             return value;
         }
+
         public boolean controllerCheckbox(String id, String label, boolean state) {
             float boxSize = controllerLayout.layoutFRAME_HEIGHT * 0.85f;
             float textWidth = controllerLayout.layoutCalcTextWidth(label, controllerLayout.layoutTEXT_SCALE);
@@ -623,11 +654,11 @@ public class Flux {
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
 
-            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayer, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
-            Color hoverOverlay = isHovered ? Color.fromARGB(30, 255, 255, 255) : Color.fromARGB(0, 0, 0, 0);
+            boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
+            FluxColor hoverOverlay = isHovered ? FluxColor.fromARGB(30, 255, 255, 255) : FluxColor.fromARGB(0, 0, 0, 0);
             controllerFlux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay);
 
-            if (controllerFlux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(controllerPlayer)) {
+            if (controllerFlux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(controllerPlayerId)) {
                 state = !state;
             }
             controllerFlux.renderer_popMatrix();
@@ -655,11 +686,11 @@ public class Flux {
 
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
-            if (controllerFlux.renderer_hitbox(trackW / 2, bounds.layoutItemBoundsH).contains(controllerPlayer)) {
+            if (controllerFlux.renderer_hitbox(trackW / 2, bounds.layoutItemBoundsH).contains(controllerPlayerId)) {
                 value = Math.max(min, value - (max - min) * 0.05f);
             }
             controllerFlux.renderer_translate(trackW / 2, 0, 0);
-            if (controllerFlux.renderer_hitbox(trackW / 2, bounds.layoutItemBoundsH).contains(controllerPlayer)) {
+            if (controllerFlux.renderer_hitbox(trackW / 2, bounds.layoutItemBoundsH).contains(controllerPlayerId)) {
                 value = Math.min(max, value + (max - min) * 0.05f);
             }
             controllerFlux.renderer_popMatrix();
@@ -667,7 +698,7 @@ public class Flux {
             return value;
         }
 
-        public void controllerColorEdit3(String id, String label, Color color) {
+        public void controllerColorEdit3(String id, String label, FluxColor color) {
             float boxSize = controllerLayout.layoutFRAME_HEIGHT;
             float textWidth = controllerLayout.layoutCalcTextWidth(label, controllerLayout.layoutTEXT_SCALE);
 
@@ -684,16 +715,16 @@ public class Flux {
     private final FluxLayout layout;
     private final FluxControllers controllers;
 
-    public Flux(Player player, Consumer<Flux> renderLogic) {
+    public Flux(UUID targetPlayerId, Consumer<Flux> renderLogic) {
         this.renderer = new FluxRenderer(r -> {
             if (renderLogic != null) renderLogic.accept(this);
         });
         this.layout = new FluxLayout(this.renderer);
-        this.controllers = new FluxControllers(this.renderer, this.layout, player);
+        this.controllers = new FluxControllers(this.renderer, this.layout, targetPlayerId);
     }
 
-    public void setTargetPlayer(Player player) {
-        this.controllers.controllerSetPlayer(player);
+    public void setTargetPlayer(UUID playerId) {
+        this.controllers.controllerSetPlayer(playerId);
     }
 
     // ==========================================
@@ -701,14 +732,24 @@ public class Flux {
     // ==========================================
     public void tick() { renderer.renderer_tick(); }
     public void destroy() { renderer.renderer_destroy(); }
-    public void updatePlayerRay(Player player) { renderer.renderer_updatePlayerRay(player); }
-    public void registerPlayerClick(Player player) { renderer.renderer_registerPlayerClick(player); }
-    public void removePlayer(Player player) { renderer.renderer_removePlayer(player); }
+
+    /**
+     * 更新玩家射线 (由外部平台传入)
+     * @param playerId 玩家 UUID
+     * @param origin 射线起点 (如玩家眼睛坐标)
+     * @param direction 射线方向
+     */
+    public void updatePlayerRay(UUID playerId, Vector3d origin, Vector3d direction) {
+        renderer.renderer_updatePlayerRay(playerId, origin, direction);
+    }
+
+    public void registerPlayerClick(UUID playerId) { renderer.renderer_registerPlayerClick(playerId); }
+    public void removePlayer(UUID playerId) { renderer.renderer_removePlayer(playerId); }
 
     // ==========================================
     // 屏幕与矩阵操作
     // ==========================================
-    public boolean screen(Location loc, Vector3f xAxis, Vector3f yAxis, Vector3f zAxis, String screenId) { return renderer.renderer_screen(loc, xAxis, yAxis, zAxis, screenId); }
+    public boolean screen(FluxLocation loc, Vector3d xAxis, Vector3d yAxis, Vector3d zAxis, String screenId) { return renderer.renderer_screen(loc, xAxis, yAxis, zAxis, screenId); }
     public void endScreen() { renderer.renderer_endScreen(); }
     public boolean area(String id) { return renderer.renderer_area(id); }
     public void endArea() { renderer.renderer_endArea(); }
@@ -735,7 +776,7 @@ public class Flux {
     public void     text        (String id, String text) { controllers.controllerText(id, text); }
     public boolean  button      (String id, String text) { return controllers.controllerButton(id, text); }
     public boolean  checkbox    (String id, String label, boolean state) { return controllers.controllerCheckbox(id, label, state); }
-    public void     colorEdit3  (String id, String label, Color color)   { controllers.controllerColorEdit3(id, label, color); }
+    public void     colorEdit3  (String id, String label, FluxColor color)   { controllers.controllerColorEdit3(id, label, color); }
     public float    sliderFloat (String id, String label, float value, float min, float max) { return controllers.controllerSliderFloat(id, label, value, min, max); }
 
     // ==========================================
@@ -744,20 +785,21 @@ public class Flux {
     public void text            (String id, String text,    float scale)                    { renderer.renderer_text(id, text, scale); }
     public void text            (String id, String text,    float scale,    int opacity)    { renderer.renderer_text(id, text, scale, opacity); }
     public boolean buttonAbs    (String id, String text,    float x,        float y)        { return controllers.controllerButtonAbs(id, text, x, y);}
-    public void rect            (String id, float width,    float height,   Color color)    { renderer.renderer_rect(id, width, height, color); }
+    public void rect            (String id, float width,    float height,   FluxColor color)    { renderer.renderer_rect(id, width, height, color); }
 
     public boolean checkboxAbs  (String id, String label,   boolean state,  float x,        float y)                            { return controllers.controllerCheckboxAbs(id, label, state, x, y); }
-    public void triangle        (String id, Vector3f p1,    Vector3f p2,    Vector3f p3,    Color color)                        { renderer.renderer_triangle(id, p1, p2, p3, color); }
-    public void text            (String id, String text,    float scale,    int opacity,    TextDisplay.TextAlignment align)    { renderer.renderer_text(id, text, scale, opacity, align); }
-    public void drawAbsRect     (String id, float x,        float y,        float w,        float h,            Color color)    { renderer.renderer_drawAbsRect(id, x, y, w, h, color); }
-    public void textAbs         (String id, String text,    float x,        float y,        float scale,        int opacity,    TextDisplay.TextAlignment align) { renderer.renderer_textAbs(id, text, x, y, scale, opacity, align); }
-    public void drawAbsTriangle (String id, float x1,       float y1,       float x2,       float y2,           float x3,       float y3, Color color) { renderer.renderer_drawAbsTriangle(id, x1, y1, x2, y2, x3, y3, color); }
+    public void triangle        (String id, Vector3d p1,    Vector3d p2,    Vector3d p3,    FluxColor color)                        { renderer.renderer_triangle(id, p1, p2, p3, color); }
+    public void text            (String id, String text,    float scale,    int opacity,    FluxTextAlignment align)    { renderer.renderer_text(id, text, scale, opacity, align); }
+    public void drawAbsRect     (String id, float x,        float y,        float w,        float h,            FluxColor color)    { renderer.renderer_drawAbsRect(id, x, y, w, h, color); }
+    public void textAbs         (String id, String text,    float x,        float y,        float scale,        int opacity,    FluxTextAlignment align) { renderer.renderer_textAbs(id, text, x, y, scale, opacity, align); }
+    public void drawAbsTriangle (String id, float x1,       float y1,       float x2,       float y2,           float x3,       float y3, FluxColor color) { renderer.renderer_drawAbsTriangle(id, x1, y1, x2, y2, x3, y3, color); }
     public float sliderFloatAbs (String id, String label,   float value,    float min,      float max,          float x,        float y) { return controllers.ControllerSliderFloatAbs(id, label, value, min, max, x, y); }
+
     // ==========================================
     // 底层碰撞检测
     // ==========================================
-    public Set<Player>  getHoveringPlayers  (float width,   float height) { return renderer.renderer_getHoveringPlayers(width, height); }
-    public Set<Player>  hitbox              (float width,   float height) { return renderer.renderer_hitbox(width, height); }
+    public Set<UUID>    getHoveringPlayers  (float width,   float height) { return renderer.renderer_getHoveringPlayers(width, height); }
+    public Set<UUID>    hitbox              (float width,   float height) { return renderer.renderer_hitbox(width, height); }
     public boolean      isHovered           (float width,   float height) { return renderer.renderer_isHovered(width, height); }
-    public boolean      isHovered           (Player player, float width, float height) { return renderer.renderer_isHovered(player, width, height); }
+    public boolean      isHovered           (UUID playerId, float width, float height) { return renderer.renderer_isHovered(playerId, width, height); }
 }

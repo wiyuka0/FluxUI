@@ -1,6 +1,8 @@
 package com.wiyuka.fluxUI;
 
 import com.wiyuka.fluxUI.examples.*;
+import com.wiyuka.fluxUI.renderer.BukkitUIPool;
+import com.wiyuka.fluxUI.renderer.UIPool;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class FluxUI extends JavaPlugin {
@@ -14,6 +16,7 @@ public final class FluxUI extends JavaPlugin {
     public void onEnable() {
         instance = this;
         // Plugin startup logic
+        UIPool.setFactory(BukkitUIPool::new);
         EffectManager effectManager = new EffectManager(this);
         getCommand("flux").setExecutor(new FluxCommand(effectManager));
         effectManager.registerEffect("test_layout", HelloWorldGUI::new);
