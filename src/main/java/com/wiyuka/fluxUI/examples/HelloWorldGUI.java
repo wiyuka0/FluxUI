@@ -53,7 +53,7 @@ public class HelloWorldGUI extends BaseEffect implements Listener {
     }
 
     @Override
-    protected void render(Flux flux) { // 注意：这里将 Flux 改为了 Flux
+    protected void render(Flux flux) {
         long now = System.currentTimeMillis();
         float deltaTime = (now - lastFrameTime) / 1000.0f;
         lastFrameTime = now;

@@ -16,8 +16,8 @@ public final class FluxUI extends JavaPlugin {
         // Plugin startup logic
         EffectManager effectManager = new EffectManager(this);
         getCommand("flux").setExecutor(new FluxCommand(effectManager));
+        effectManager.registerEffect("test_layout", HelloWorldGUI::new);
         effectManager.registerEffect("simple_window", SimpleWindowGUI::new);
-        effectManager.registerEffect("flux", FluxLogoEffect::new);
 
     }
 
