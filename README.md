@@ -181,3 +181,6 @@ private void renderUI(Flux flux) {
 1. **组件 ID 唯一性**：FluxUI 依赖传入的 `id` 字符串来追踪和复用底层实体。在同一个屏幕层级下，请确保每个组件的 ID 是唯一的（例如在循环中使用 `"item_" + index`）。
 2. **内存泄漏防范**：必须在玩家退出 (`PlayerQuitEvent`) 或插件卸载 (`onDisable`) 时调用 `flux.destroy()`。否则旧的实体将脱离插件控制并残留在世界中。
 3. **Z-Fighting (深度冲突)**：建议使用 `flux.translate(0, 0, 0.01f)` 来明确图层的前后关系。
+
+## 鸣谢
++ [TheCymaera](https://github.com/TheCymaera/minecraft-hologram) 提供使用文本展示实体渲染三角形的方案
