@@ -23,7 +23,7 @@ public class FluxRenderer {
 
     private int currentInterpTicks = 0;
     private float microZOffset = 0.0f;
-    private static final float MICRO_Z_STEP = 0f;
+    private static final float MICRO_Z_STEP = 0.0001f;
     private static final float MAX_INTERACT_DISTANCE = 10.0f;
 
     private final Consumer<FluxRenderer> renderLogic;
