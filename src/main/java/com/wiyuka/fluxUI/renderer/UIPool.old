@@ -1,0 +1,62 @@
+//package com.wiyuka.fluxUI.renderer;
+//
+//import org.joml.Matrix4d;
+//import org.joml.Vector3d;
+//
+//public class UIPool {
+//    public interface poolImpl {
+//        void poolBeginFrame();
+//        void poolEndFrame();
+//        void poolDestroy();
+//        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks);
+//        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment);
+//        void poolDrawRect(String id, Matrix4d worldTransform, Flux.FluxColor color, int interpTicks);
+//        void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor color, int interpTicks);
+//    }
+//
+//    public interface poolFactory {
+//        poolImpl pool_create(Flux.FluxLocation location);
+//    }
+//
+//    private static poolFactory pool_factory;
+//
+//    /**
+//     * 在插件启动时 (onEnable) 调用此方法注入 Bukkit 实现
+//     */
+//    public static void setPoolFactory(poolFactory f) {
+//        pool_factory = f;
+//    }
+//
+//    // ==========================================
+//    // 代理逻辑
+//    // ==========================================
+//
+//    private final poolImpl pool_impl;
+//
+//    public UIPool(Flux.FluxLocation location) {
+//        if (pool_factory == null) {
+//            throw new IllegalStateException("UIPool factory is not set! Please call UIPool.setFactory() before using Flux.");
+//        }
+//        this.pool_impl = pool_factory.pool_create(location);
+//    }
+//
+//    public void pool_beginFrame() { pool_impl.poolBeginFrame(); }
+//    public void pool_endFrame() { pool_impl.poolEndFrame(); }
+//    public void pool_destroy() { pool_impl.poolDestroy(); }
+//
+//    public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks) {
+//        pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks);
+//    }
+//
+//    public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment) {
+//        pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks, alignment);
+//    }
+//
+//    public void pool_drawRect(String id, Matrix4d worldTransform, Flux.FluxColor color, int interpTicks) {
+//        pool_impl.poolDrawRect(id, worldTransform, color, interpTicks);
+//    }
+//
+//    public void pool_drawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor color, int interpTicks) {
+//        pool_impl.poolDrawTriangle(id, point1, point2, point3, worldBaseMatrix, color, interpTicks);
+//    }
+//}

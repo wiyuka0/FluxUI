@@ -9,38 +9,20 @@ import java.util.*;
 import java.util.function.Consumer;
 
 public class Flux {
-
-    // ==========================================
-    // 解耦引入的通用数据结构 (替代 Bukkit API)
-    // ==========================================
-
-    public static class FluxColor {
-        public final int a, r, g, b;
-        public FluxColor(int a, int r, int g, int b) {
-            this.a = a; this.r = r; this.g = g; this.b = b;
-        }
+    public record FluxColor(int a, int r, int g, int b) {
         public static FluxColor fromARGB(int a, int r, int g, int b) {
-            return new FluxColor(a, r, g, b);
+                return new FluxColor(a, r, g, b);
+            }
         }
-    }
-
-    public static class FluxLocation {
-        public final String world;
-        public final double x, y, z;
-
-        public FluxLocation(String world, double x, double y, double z) {
-            this.world = world; this.x = x; this.y = y; this.z = z;
-        }
-
+    public record FluxLocation(String world, double x, double y, double z) {
         public double distanceSquared(FluxLocation other) {
-            if (!this.world.equals(other.world)) return Double.MAX_VALUE;
-            double dx = this.x - other.x;
-            double dy = this.y - other.y;
-            double dz = this.z - other.z;
-            return dx * dx + dy * dy + dz * dz;
+                if (!this.world.equals(other.world)) return Double.MAX_VALUE;
+                double dx = this.x - other.x;
+                double dy = this.y - other.y;
+                double dz = this.z - other.z;
+                return dx * dx + dy * dy + dz * dz;
+            }
         }
-    }
-
     public enum FluxTextAlignment {
         LEFT, CENTER, RIGHT
     }
@@ -209,7 +191,6 @@ public class Flux {
             return pixels * layoutTEXT_WIDTH_RATIO * scale;
         }
     }
-
     private static class FluxRenderer {
         private final Map<String, UIPool> renderer_activeScreens = new HashMap<>();
         private final Map<String, FluxLocation> renderer_screenLocations = new HashMap<>();
@@ -240,7 +221,7 @@ public class Flux {
 
         public void renderer_destroy() {
             for (UIPool pool : renderer_activeScreens.values()) {
-                pool.destroy();
+                pool.pool_destroy();
             }
             renderer_activeScreens.clear();
             renderer_screenLocations.clear();
@@ -267,7 +248,7 @@ public class Flux {
         private void renderer_beginTick() {
             renderer_screensRenderedThisTick.clear();
             for (UIPool pool : renderer_activeScreens.values()) {
-                pool.beginFrame();
+                pool.pool_beginFrame();
             }
         }
 
@@ -275,9 +256,9 @@ public class Flux {
             List<String> toRemove = new ArrayList<>();
             for (Map.Entry<String, UIPool> entry : renderer_activeScreens.entrySet()) {
                 if (renderer_screensRenderedThisTick.contains(entry.getKey())) {
-                    entry.getValue().endFrame();
+                    entry.getValue().pool_endFrame();
                 } else {
-                    entry.getValue().destroy();
+                    entry.getValue().pool_destroy();
                     toRemove.add(entry.getKey());
                 }
             }
@@ -329,7 +310,7 @@ public class Flux {
             if (originalLoc == null || !originalLoc.world.equals(loc.world) || originalLoc.distanceSquared(loc) > 4096.0f) {
                 if (originalLoc != null) {
                     UIPool oldPool = renderer_activeScreens.remove(screenId);
-                    if (oldPool != null) oldPool.destroy();
+                    if (oldPool != null) oldPool.pool_destroy();
                 }
                 originalLoc = new FluxLocation(loc.world, loc.x, loc.y, loc.z);
                 renderer_screenLocations.put(screenId, originalLoc);
@@ -390,7 +371,7 @@ public class Flux {
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(x, y - h, safeZ).scale(w, h, 1f);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
         }
 
         public void renderer_drawAbsTriangle(String id, float x1, float y1, float x2, float y2, float x3, float y3, FluxColor color) {
@@ -399,7 +380,7 @@ public class Flux {
             Vector3d p1 = new Vector3d(x1, y1, safeZ);
             Vector3d p2 = new Vector3d(x2, y2, safeZ);
             Vector3d p3 = new Vector3d(x3, y3, safeZ);
-            renderer_currentPool.drawTriangle(renderer_genFullId(id), p1, p2, p3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawTriangle(renderer_genFullId(id), p1, p2, p3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
         }
 
         public void renderer_text(String id, String text, float scale) { renderer_text(id, text, scale, 255); }
@@ -409,7 +390,7 @@ public class Flux {
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(scale, scale, scale);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks);
         }
 
         public void renderer_text(String id, String text, float scale, int opacity, FluxTextAlignment alignment) {
@@ -417,7 +398,7 @@ public class Flux {
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(scale, scale, scale);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, alignment);
+            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, alignment);
         }
 
         public void renderer_textAbs(String id, String text, float x, float y, float scale, int opacity, FluxTextAlignment align) {
@@ -425,7 +406,7 @@ public class Flux {
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(x, y, safeZ).scale(scale, scale, scale);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, align);
+            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, align);
         }
 
         public void renderer_rect(String id, float width, float height, FluxColor color) {
@@ -433,7 +414,7 @@ public class Flux {
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(width, height, 1f);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
         }
 
         public void renderer_triangle(String id, Vector3d p1, Vector3d p2, Vector3d p3, FluxColor color) {
@@ -442,7 +423,7 @@ public class Flux {
             Vector3d op1 = new Vector3d(p1).add(0, 0, safeZ);
             Vector3d op2 = new Vector3d(p2).add(0, 0, safeZ);
             Vector3d op3 = new Vector3d(p3).add(0, 0, safeZ);
-            renderer_currentPool.drawTriangle(renderer_genFullId(id), op1, op2, op3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawTriangle(renderer_genFullId(id), op1, op2, op3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
         }
 
         public Set<UUID> renderer_getHoveringPlayers(float width, float height) {
@@ -513,7 +494,6 @@ public class Flux {
             return z;
         }
     }
-
     private static class FluxControllers {
         private final FluxRenderer controllerFlux;
         private final FluxLayout controllerLayout;
@@ -708,6 +688,67 @@ public class Flux {
             controllerFlux.renderer_drawAbsRect(id + "_preview", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, color);
 
             controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - controllerLayout.layoutFRAME_HEIGHT / 2f, controllerLayout.layoutTEXT_SCALE);
+        }
+    }
+
+    public static interface PoolImpl {
+        void poolBeginFrame();
+        void poolEndFrame();
+        void poolDestroy();
+        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks);
+        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment);
+        void poolDrawRect(String id, Matrix4d worldTransform, Flux.FluxColor color, int interpTicks);
+        void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor color, int interpTicks);
+    }
+
+    public static void setPoolFactory(UIPool.poolFactory f) {
+        UIPool.setPoolFactory(f);
+    }
+    public static class UIPool {
+        public interface poolFactory {
+            PoolImpl pool_create(Flux.FluxLocation location);
+        }
+
+        private static poolFactory pool_factory;
+
+        /**
+         * 在插件启动时 (onEnable) 调用此方法注入 Bukkit 实现
+         */
+        private static void setPoolFactory(poolFactory f) {
+            pool_factory = f;
+        }
+
+        // ==========================================
+        // 代理逻辑
+        // ==========================================
+
+        private final PoolImpl pool_impl;
+
+        public UIPool(Flux.FluxLocation location) {
+            if (pool_factory == null) {
+                throw new IllegalStateException("UIPool factory is not set! Please call UIPool.setFactory() before using Flux.");
+            }
+            this.pool_impl = pool_factory.pool_create(location);
+        }
+
+        public void pool_beginFrame() { pool_impl.poolBeginFrame(); }
+        public void pool_endFrame() { pool_impl.poolEndFrame(); }
+        public void pool_destroy() { pool_impl.poolDestroy(); }
+
+        public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks) {
+            pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks);
+        }
+
+        public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment) {
+            pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks, alignment);
+        }
+
+        public void pool_drawRect(String id, Matrix4d worldTransform, Flux.FluxColor color, int interpTicks) {
+            pool_impl.poolDrawRect(id, worldTransform, color, interpTicks);
+        }
+
+        public void pool_drawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor color, int interpTicks) {
+            pool_impl.poolDrawTriangle(id, point1, point2, point3, worldBaseMatrix, color, interpTicks);
         }
     }
 

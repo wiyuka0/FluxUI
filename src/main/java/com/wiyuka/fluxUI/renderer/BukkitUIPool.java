@@ -13,7 +13,7 @@ import org.joml.*;
 import java.lang.Math;
 import java.util.*;
 
-public class BukkitUIPool implements UIPool.Impl {
+public class BukkitUIPool implements Flux.PoolImpl {
     private final World world;
     private final Location anchorLoc;
     private final Map<String, List<TextDisplay>> entityCache = new HashMap<>();
@@ -50,15 +50,15 @@ public class BukkitUIPool implements UIPool.Impl {
     }
 
     public BukkitUIPool(Flux.FluxLocation fluxLoc) {
-        this.world = Bukkit.getWorld(fluxLoc.world);
+        this.world = Bukkit.getWorld(fluxLoc.world());
         if (this.world == null) {
-            throw new IllegalArgumentException("World not found: " + fluxLoc.world);
+            throw new IllegalArgumentException("World not found: " + fluxLoc.world());
         }
-        this.anchorLoc = new Location(this.world, fluxLoc.x, fluxLoc.y, fluxLoc.z, 0f, 0f);
+        this.anchorLoc = new Location(this.world, fluxLoc.x(), fluxLoc.y(), fluxLoc.z(), 0f, 0f);
     }
 
     @Override
-    public void destroy() {
+    public void poolDestroy() {
         for (List<TextDisplay> displays : entityCache.values()) {
             displays.forEach(Display::remove);
         }
@@ -67,12 +67,12 @@ public class BukkitUIPool implements UIPool.Impl {
     }
 
     @Override
-    public void beginFrame() {
+    public void poolBeginFrame() {
         activeNodesThisFrame.clear();
     }
 
     @Override
-    public void endFrame() {
+    public void poolEndFrame() {
         List<String> toRemove = new ArrayList<>();
         for (Map.Entry<String, List<TextDisplay>> entry : entityCache.entrySet()) {
             if (!activeNodesThisFrame.contains(entry.getKey())) {
@@ -84,12 +84,12 @@ public class BukkitUIPool implements UIPool.Impl {
     }
 
     @Override
-    public void drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks) {
+    public void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks) {
         drawTextInternal(id, text, worldTransform, opacity, interpTicks, TextDisplay.TextAlignment.CENTER);
     }
 
     @Override
-    public void drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment) {
+    public void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment) {
         drawTextInternal(id, text, worldTransform, opacity, interpTicks, convertAlignment(alignment));
     }
 
@@ -105,7 +105,7 @@ public class BukkitUIPool implements UIPool.Impl {
     }
 
     @Override
-    public void drawRect(String id, Matrix4d worldTransform, Flux.FluxColor fluxColor, int interpTicks) {
+    public void poolDrawRect(String id, Matrix4d worldTransform, Flux.FluxColor fluxColor, int interpTicks) {
         activeNodesThisFrame.add(id);
         List<TextDisplay> displays = getOrSpawnEntities(id, 1);
 
@@ -114,7 +114,7 @@ public class BukkitUIPool implements UIPool.Impl {
     }
 
     @Override
-    public void drawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor fluxColor, int interpTicks) {
+    public void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor fluxColor, int interpTicks) {
         activeNodesThisFrame.add(id);
 
         Vector3d p2 = new Vector3d(point2).sub(point1);
@@ -226,7 +226,7 @@ public class BukkitUIPool implements UIPool.Impl {
     // ==========================================
 
     private Color convertColor(Flux.FluxColor color) {
-        return Color.fromARGB(color.a, color.r, color.g, color.b);
+        return Color.fromARGB(color.a(), color.r(), color.g(), color.b());
     }
 
     private TextDisplay.TextAlignment convertAlignment(Flux.FluxTextAlignment alignment) {
