@@ -1,4 +1,5 @@
 # FluxUI
+<img width="1367" height="1237" alt="image" src="https://github.com/user-attachments/assets/02586864-4d66-4277-ac47-0aca9bfb9d3b" />
 
 FluxUI 是一个专为 Minecraft (Bukkit/Paper) 设计的 2D 即时渲染模式 (Immediate Mode GUI, IMGUI) 界面渲染库。
 它基于 Minecraft 的 `TextDisplay` 实体与 JOML 矩阵运算，允许开发者在游戏世界中以低性能开销绘制出类似 Dear ImGui 的现代化控制面板。
