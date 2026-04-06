@@ -1,0 +1,200 @@
+//package com.wiyuka.fluxUI.renderer;
+//
+//import org.bukkit.Color;
+//import org.bukkit.entity.Player;
+//import org.bukkit.entity.TextDisplay;
+//
+//public class FluxControllers {
+//    private final FluxRenderer flux;
+//    private final FluxLayout layout;
+//    private Player player;
+//
+//    public FluxControllers(FluxRenderer flux, FluxLayout layout, Player player) {
+//        this.flux = flux;
+//        this.layout = layout;
+//        this.player = player;
+//    }
+//
+//    public void controllerSetPlayer(Player player) {
+//        this.player = player;
+//    }
+//
+//    public void controllerText(String id, String text) {
+//        float textWidth = layout.layoutCalcTextWidth(text, layout.layoutTEXT_SCALE);
+//        FluxLayout.LayoutItemBounds bounds = layout.layoutAllocateSpace(textWidth, layout.layoutFRAME_HEIGHT);
+//        layout.layoutDrawTextLeft(id, text, bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, layout.layoutTEXT_SCALE);
+//    }
+//
+//    public boolean controllerButton(String id, String text) {
+//        float textWidth = layout.layoutCalcTextWidth(text, layout.layoutTEXT_SCALE);
+//        float width = textWidth + (layout.layoutFRAME_PADDING.x * 2);
+//
+//        FluxLayout.LayoutItemBounds bounds = layout.layoutAllocateSpace(width, layout.layoutFRAME_HEIGHT);
+//
+//        flux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, layout.layoutColButton);
+//        layout.layoutDrawTextCenter(id + "_txt", text, bounds.layoutItemBoundsAbsX + bounds.layoutItemBoundsW / 2f, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, layout.layoutTEXT_SCALE);
+//
+//        flux.renderer_pushMatrix();
+//        flux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
+//
+//        boolean isHovered = flux.renderer_isHovered(player, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
+//        Color hoverOverlay = isHovered ? Color.fromARGB(50, 255, 255, 255) : Color.fromARGB(0, 0, 0, 0);
+//        flux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay);
+//
+//        boolean clicked = flux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(player);
+//        flux.renderer_popMatrix();
+//
+//        return clicked;
+//    }
+//
+//    public boolean controllerButtonAbs(String id, String text, float x, float y) {
+//        float textWidth = layout.layoutCalcTextWidth(text, layout.layoutTEXT_SCALE);
+//        float width = textWidth + (layout.layoutFRAME_PADDING.x * 2);
+//        float height = layout.layoutFRAME_HEIGHT;
+//
+//        flux.renderer_pushMatrix();
+//        flux.renderer_translate(x, y, 0);
+//
+//        flux.renderer_rect(id + "_bg", width, height, layout.layoutColButton);
+//        flux.renderer_textAbs(id + "_txt", text, width / 2f, -height / 2f, layout.layoutTEXT_SCALE, 255, TextDisplay.TextAlignment.CENTER);
+//
+//        boolean isHovered = flux.renderer_isHovered(player, width, height);
+//        if (isHovered) {
+//            flux.renderer_rect(id + "_hover", width, height, Color.fromARGB(50, 255, 255, 255));
+//        }
+//        boolean clicked = flux.renderer_hitbox(width, height).contains(player);
+//
+//        flux.renderer_popMatrix();
+//        return clicked;
+//    }
+//
+//    public boolean controllerCheckboxAbs(String id, String label, boolean state, float x, float y) {
+//        float boxSize = layout.layoutFRAME_HEIGHT * 0.85f;
+//        float textWidth = layout.layoutCalcTextWidth(label, layout.layoutTEXT_SCALE);
+//        float totalWidth = boxSize + layout.layoutITEM_SPACING.x + textWidth;
+//        float height = layout.layoutFRAME_HEIGHT;
+//        float boxOffsetY = (height - boxSize) / 2f;
+//        flux.renderer_drawAbsRect(id + "_bg", x, y - boxOffsetY, boxSize, boxSize, layout.layoutColFrameBg);
+//        if (state) {
+//            float pad = 0.04f;
+//            flux.renderer_drawAbsRect(id + "_tick", x + pad, y - boxOffsetY - pad, boxSize - pad * 2, boxSize - pad * 2, layout.layoutColSliderGrab);
+//        }
+//        layout.layoutDrawTextLeft(id + "_txt", label, x + boxSize + layout.layoutITEM_SPACING.x, y - height / 2f, layout.layoutTEXT_SCALE);
+//        flux.renderer_pushMatrix();
+//        flux.renderer_translate(x, y - height, 0);
+//        boolean isHovered = flux.renderer_isHovered(player, totalWidth, height);
+//        Color hoverOverlay = isHovered ? Color.fromARGB(30, 255, 255, 255) : Color.fromARGB(0, 0, 0, 0);
+//        flux.renderer_rect(id + "_hover", totalWidth, height, hoverOverlay);
+//        if (flux.renderer_hitbox(totalWidth, height).contains(player)) state = !state;
+//        flux.renderer_popMatrix();
+//        return state;
+//    }
+//    public float ControllerSliderFloatAbs(String id, String label, float value, float min, float max, float x, float y) {
+//        float trackW = 2.5f;
+//        float height = layout.layoutFRAME_HEIGHT;
+//
+//        flux.renderer_drawAbsRect(id + "_bg", x, y, trackW, height, layout.layoutColFrameBg);
+//
+//        float percent = Math.max(0, Math.min(1, (value - min) / (max - min)));
+//        float fillW = percent * trackW;
+//        if (fillW > 0) {
+//            flux.renderer_drawAbsRect(id + "_fill", x, y, fillW, height, layout.layoutColSliderGrab);
+//        }
+//        String valText = String.format("%.3f", value);
+//        layout.layoutDrawTextCenter(id + "_val", valText, x + trackW / 2f, y - height / 2f, layout.layoutTEXT_SCALE);
+//        layout.layoutDrawTextLeft(id + "_txt", label, x + trackW + layout.layoutITEM_SPACING.x, y - height / 2f, layout.layoutTEXT_SCALE);
+//
+//        flux.renderer_pushMatrix();
+//        flux.renderer_translate(x, y - height, 0);
+//
+//        boolean isHovered = flux.renderer_isHovered(player, trackW, height);
+//        if (isHovered) {
+//            flux.renderer_rect(id + "_hover", trackW, height, Color.fromARGB(30, 255, 255, 255));
+//        }
+//        if (flux.renderer_hitbox(trackW / 2, height).contains(player)) {
+//            value = Math.max(min, value - (max - min) * 0.05f);
+//        }
+//
+//        flux.renderer_translate(trackW / 2, 0, 0);
+//        if (flux.renderer_hitbox(trackW / 2, height).contains(player)) {
+//            value = Math.min(max, value + (max - min) * 0.05f);
+//        }
+//
+//        flux.renderer_popMatrix();
+//        return value;
+//    }
+//    public boolean controllerCheckbox(String id, String label, boolean state) {
+//        float boxSize = layout.layoutFRAME_HEIGHT * 0.85f;
+//        float textWidth = layout.layoutCalcTextWidth(label, layout.layoutTEXT_SCALE);
+//
+//        FluxLayout.LayoutItemBounds bounds = layout.layoutAllocateSpace(boxSize + layout.layoutITEM_SPACING.x + textWidth, layout.layoutFRAME_HEIGHT);
+//        float boxOffsetY = (layout.layoutFRAME_HEIGHT - boxSize) / 2f;
+//
+//        flux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, layout.layoutColFrameBg);
+//
+//        if (state) {
+//            float pad = 0.04f;
+//            flux.renderer_drawAbsRect(id + "_tick", bounds.layoutItemBoundsAbsX + pad, bounds.layoutItemBoundsAbsY - boxOffsetY - pad, boxSize - pad * 2, boxSize - pad * 2, layout.layoutColSliderGrab);
+//        }
+//
+//        layout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + layout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - layout.layoutFRAME_HEIGHT / 2f, layout.layoutTEXT_SCALE);
+//
+//        flux.renderer_pushMatrix();
+//        flux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
+//
+//        boolean isHovered = flux.renderer_isHovered(player, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
+//        Color hoverOverlay = isHovered ? Color.fromARGB(30, 255, 255, 255) : Color.fromARGB(0, 0, 0, 0);
+//        flux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay);
+//
+//        if (flux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(player)) {
+//            state = !state;
+//        }
+//        flux.renderer_popMatrix();
+//
+//        return state;
+//    }
+//
+//    public float controllerSliderFloat(String id, String label, float value, float min, float max) {
+//        float trackW = 2.5f;
+//        float textWidth = layout.layoutCalcTextWidth(label, layout.layoutTEXT_SCALE);
+//
+//        FluxLayout.LayoutItemBounds bounds = layout.layoutAllocateSpace(trackW + layout.layoutITEM_SPACING.x + textWidth, layout.layoutFRAME_HEIGHT);
+//
+//        flux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, trackW, bounds.layoutItemBoundsH, layout.layoutColFrameBg);
+//
+//        float percent = Math.max(0, Math.min(1, (value - min) / (max - min)));
+//        float fillW = percent * trackW;
+//        if (fillW > 0) {
+//            flux.renderer_drawAbsRect(id + "_fill", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, fillW, bounds.layoutItemBoundsH, layout.layoutColSliderGrab);
+//        }
+//
+//        String valText = String.format("%.3f", value);
+//        layout.layoutDrawTextCenter(id + "_val", valText, bounds.layoutItemBoundsAbsX + trackW / 2f, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, layout.layoutTEXT_SCALE);
+//        layout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + trackW + layout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, layout.layoutTEXT_SCALE);
+//
+//        flux.renderer_pushMatrix();
+//        flux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
+//        if (flux.renderer_hitbox(trackW / 2, bounds.layoutItemBoundsH).contains(player)) {
+//            value = Math.max(min, value - (max - min) * 0.05f);
+//        }
+//        flux.renderer_translate(trackW / 2, 0, 0);
+//        if (flux.renderer_hitbox(trackW / 2, bounds.layoutItemBoundsH).contains(player)) {
+//            value = Math.min(max, value + (max - min) * 0.05f);
+//        }
+//        flux.renderer_popMatrix();
+//
+//        return value;
+//    }
+//
+//    public void controllerColorEdit3(String id, String label, Color color) {
+//        float boxSize = layout.layoutFRAME_HEIGHT;
+//        float textWidth = layout.layoutCalcTextWidth(label, layout.layoutTEXT_SCALE);
+//
+//        FluxLayout.LayoutItemBounds bounds = layout.layoutAllocateSpace(boxSize + layout.layoutITEM_SPACING.x + textWidth, layout.layoutFRAME_HEIGHT);
+//
+//        float boxOffsetY = (layout.layoutFRAME_HEIGHT - boxSize) / 2f;
+//        flux.renderer_drawAbsRect(id + "_preview", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, color);
+//
+//        layout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + layout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - layout.layoutFRAME_HEIGHT / 2f, layout.layoutTEXT_SCALE);
+//    }
+//}

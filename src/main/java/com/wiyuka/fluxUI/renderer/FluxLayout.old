@@ -1,0 +1,166 @@
+//package com.wiyuka.fluxUI.renderer;
+//
+//import org.bukkit.Color;
+//import org.bukkit.entity.TextDisplay;
+//import org.joml.Vector2f;
+//
+//public class FluxLayout {
+//    private final FluxRenderer layoutFlux;
+//
+//    private final Vector2f layoutWindowPos = new Vector2f();
+//    private float layoutCursorX = 0f;
+//    private float layoutCursorY = 0f;
+//    private float layoutCurrLineHeight = 0f;
+//    private boolean layoutIsSameLine = false;
+//    private boolean layoutIsFirstItemOnLine = true;
+//
+//    private float layoutContentMaxX = 0f;
+//    private float layoutContentMaxY = 0f;
+//    private float layoutAutoWindowWidth = 4.0f;
+//    private float layoutAutoWindowHeight = 3.0f;
+//
+//    public final float layoutTEXT_SCALE = 0.45f;
+//    public final float layoutFRAME_HEIGHT = 0.22f;
+//
+//    public final Vector2f layoutWINDOW_PADDING = new Vector2f(0.15f, 0.15f);
+//    public final Vector2f layoutITEM_SPACING = new Vector2f(0.15f, 0.05f);
+//    public final Vector2f layoutFRAME_PADDING = new Vector2f(0.15f, 0.0f);
+//
+//    public final float layoutTITLE_BAR_HEIGHT = 0.3f;
+//    public final float layoutTEXT_OFFSET_Y = -0.05f;
+//
+//    private final float layoutTEXT_WIDTH_RATIO = 0.028f;
+//
+//    public final Color layoutColWindowBg = Color.fromARGB(240, 15, 15, 15);
+//    public final Color layoutColTitleBg = Color.fromARGB(255, 45, 60, 90);
+//    public final Color layoutColFrameBg = Color.fromARGB(255, 30, 45, 70);
+//    public final Color layoutColSliderGrab = Color.fromARGB(255, 66, 150, 250);
+//    public final Color layoutColButton = Color.fromARGB(255, 41, 74, 122);
+//
+//    public FluxLayout(FluxRenderer layoutFlux) {
+//        this.layoutFlux = layoutFlux;
+//    }
+//
+//    public void layoutBeginWindow(String title, float startX, float startY) {
+//        layoutWindowPos.set(startX, startY);
+//
+//        layoutFlux.renderer_drawAbsRect("win_bg_" + title, startX, startY, layoutAutoWindowWidth, layoutAutoWindowHeight, layoutColWindowBg);
+//        layoutFlux.renderer_drawAbsRect("win_titlebg_" + title, startX, startY, layoutAutoWindowWidth, layoutTITLE_BAR_HEIGHT, layoutColTitleBg);
+//
+//        layoutDrawTextLeft("win_title_txt_" + title, "▼ " + title, startX + 0.08f, startY - layoutTITLE_BAR_HEIGHT / 2f, layoutTEXT_SCALE);
+//
+//        layoutCursorX = layoutWINDOW_PADDING.x;
+//        layoutCursorY = layoutTITLE_BAR_HEIGHT + layoutWINDOW_PADDING.y;
+//        layoutCurrLineHeight = 0f;
+//        layoutIsSameLine = false;
+//        layoutIsFirstItemOnLine = true;
+//
+//        layoutContentMaxX = layoutCalcTextWidth("▼ " + title, layoutTEXT_SCALE) + 0.3f;
+//        layoutContentMaxY = layoutCursorY;
+//    }
+//
+//    public void layoutEndWindow() {
+//        layoutAutoWindowWidth = layoutContentMaxX + layoutWINDOW_PADDING.x;
+//        layoutAutoWindowHeight = layoutContentMaxY + layoutWINDOW_PADDING.y;
+//    }
+//
+//    public void layoutSameLine() {
+//        layoutIsSameLine = true;
+//    }
+//
+//    public static class LayoutItemBounds {
+//        public float layoutItemBoundsAbsX, layoutItemBoundsAbsY, layoutItemBoundsW, layoutItemBoundsH;
+//        public LayoutItemBounds(float layoutItemBoundsAbsX, float layoutItemBoundsAbsY, float layoutItemBoundsW, float layoutItemBoundsH) {
+//            this.layoutItemBoundsAbsX = layoutItemBoundsAbsX; this.layoutItemBoundsAbsY = layoutItemBoundsAbsY; this.layoutItemBoundsW = layoutItemBoundsW; this.layoutItemBoundsH = layoutItemBoundsH;
+//        }
+//    }
+//
+//    public LayoutItemBounds layoutAllocateSpace(float width, float height) {
+//        if (!layoutIsSameLine) {
+//            layoutCursorX = layoutWINDOW_PADDING.x;
+//            if (!layoutIsFirstItemOnLine) {
+//                layoutCursorY += layoutCurrLineHeight + layoutITEM_SPACING.y;
+//            }
+//            layoutCurrLineHeight = 0f;
+//        } else {
+//            layoutCursorX += layoutITEM_SPACING.x;
+//        }
+//
+//        float absX = layoutWindowPos.x + layoutCursorX;
+//        float absY = layoutWindowPos.y - layoutCursorY;
+//
+//        layoutCurrLineHeight = Math.max(layoutCurrLineHeight, height);
+//        layoutCursorX += width;
+//
+//        layoutContentMaxX = Math.max(layoutContentMaxX, layoutCursorX);
+//        layoutContentMaxY = Math.max(layoutContentMaxY, layoutCursorY + layoutCurrLineHeight);
+//
+//        layoutIsSameLine = false;
+//        layoutIsFirstItemOnLine = false;
+//        return new LayoutItemBounds(absX, absY, width, height);
+//    }
+//
+//    public void layoutDrawTextLeft(String id, String text, float absLeftX, float absCenterY, float scale) {
+//        float textWidth = layoutCalcTextWidth(text, scale);
+//        layoutFlux.renderer_textAbs(id, text, absLeftX + textWidth / 2f, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, TextDisplay.TextAlignment.CENTER);
+//    }
+//
+//    public void layoutDrawTextCenter(String id, String text, float absCenterX, float absCenterY, float scale) {
+//        layoutFlux.renderer_textAbs(id, text, absCenterX, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, TextDisplay.TextAlignment.CENTER);
+//    }
+//
+//    public float layoutCalcTextWidth(String text, float scale) {
+//        if (text == null || text.isEmpty()) return 0;
+//
+//        int pixels = 0;
+//        boolean isBold = false;
+//
+//        for (int i = 0; i < text.length(); i++) {
+//            char c = text.charAt(i);
+//            if (c == '§' && i + 1 < text.length()) {
+//                char formatCode = Character.toLowerCase(text.charAt(i + 1));
+//                if (formatCode == 'l') {
+//                    isBold = true;
+//                } else if ((formatCode >= '0' && formatCode <= '9') ||
+//                        (formatCode >= 'a' && formatCode <= 'f') ||
+//                        formatCode == 'r') {
+//                    isBold = false;
+//                }
+//                i++;
+//                continue;
+//            }
+//
+//            int charWidth = 0;
+//            if (c > 255) {
+//                charWidth = 9;
+//            } else {
+//                switch (c) {
+//                    case '!': case '\'': case ',': case '.': case ':': case ';': case 'i': case '|':
+//                        charWidth = 2; break;
+//                    case '`': case 'l':
+//                        charWidth = 3; break;
+//                    case ' ': case '"': case '(': case ')': case '*': case 'I': case '[': case ']': case 't': case '{': case '}':
+//                        charWidth = 4; break;
+//                    case '<': case '>': case 'f': case 'k':
+//                        charWidth = 5; break;
+//                    case '@': case '~':
+//                        charWidth = 7; break;
+//                    default:
+//                        charWidth = 6; break;
+//                }
+//            }
+//
+//            if (isBold) {
+//                charWidth += 1;
+//            }
+//
+//            pixels += charWidth;
+//        }
+//
+//        if (pixels > 0) {
+//            pixels -= 1;
+//        }
+//
+//        return pixels * layoutTEXT_WIDTH_RATIO * scale;
+//    }
+//}
