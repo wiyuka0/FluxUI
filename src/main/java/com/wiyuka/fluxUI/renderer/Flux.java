@@ -202,7 +202,7 @@ public class Flux {
 
         private int renderer_currentInterpTicks = 0;
         private float renderer_microZOffset = 0.0f;
-        private static final float renderer_MICRO_Z_STEP = 0.0001f;
+        private static final float renderer_MICRO_Z_STEP = 0.000f;
         private static final float renderer_MAX_INTERACT_DISTANCE = 10.0f;
 
         private final Consumer<FluxRenderer> renderer_renderLogic;
@@ -843,4 +843,31 @@ public class Flux {
     public Set<UUID>    hitbox              (float width,   float height) { return renderer.renderer_hitbox(width, height); }
     public boolean      isHovered           (float width,   float height) { return renderer.renderer_isHovered(width, height); }
     public boolean      isHovered           (UUID playerId, float width, float height) { return renderer.renderer_isHovered(playerId, width, height); }
+
+    // ==========================================
+    // 交互控件 (无 ID 重载版，自动哈希 text/label)
+    // ==========================================
+    public void     text        (String text)                                           { this.text(hashId(text), text); }
+    public boolean  button      (String text)                                           { return this.button(hashId(text), text); }
+    public boolean  checkbox    (String label, boolean state)                           { return this.checkbox(hashId(label), label, state); }
+    public void     colorEdit3  (String label, FluxColor color)                         { this.colorEdit3(hashId(label), label, color); }
+    public float    sliderFloat (String label, float value, float min, float max)       { return this.sliderFloat(hashId(label), label, value, min, max); }
+
+    // ==========================================
+    // 基础图形与文本 (无 ID 重载版，自动哈希 text/label)
+    // ==========================================
+    public void     text            (String text,   float scale)                                { this.text(hashId(text), text, scale); }
+    public void     text            (String text,   float scale,    int opacity)                { this.text(hashId(text), text, scale, opacity); }
+    public boolean  buttonAbs       (String text,   float x,        float y)                    { return this.buttonAbs(hashId(text), text, x, y); }
+
+    public boolean  checkboxAbs     (String label,  boolean state,  float x,        float y)    { return this.checkboxAbs(hashId(label), label, state, x, y); }
+    public void     text            (String text,   float scale,    int opacity,    FluxTextAlignment align) { this.text(hashId(text), text, scale, opacity, align); }
+    public void     textAbs         (String text,   float x,        float y,        float scale,        int opacity,    FluxTextAlignment align) { this.textAbs(hashId(text), text, x, y, scale, opacity, align); }
+    public float    sliderFloatAbs  (String label,  float value,    float min,      float max,          float x,        float y) { return this.sliderFloatAbs(hashId(label), label, value, min, max, x, y); }
+    // ==========================================
+    // 内部辅助方法：生成隐式 ID
+    // ==========================================
+    private String hashId(String text) {
+        return text == null ? "null_id" : Integer.toHexString(text.hashCode());
+    }
 }

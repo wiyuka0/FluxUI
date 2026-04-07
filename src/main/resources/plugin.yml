@@ -6,3 +6,4 @@ authors: [ wiyuka ]
 commands:
   flux:
 
+remap: false

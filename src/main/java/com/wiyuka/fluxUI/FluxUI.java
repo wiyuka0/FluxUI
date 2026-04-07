@@ -21,6 +21,7 @@ public final class FluxUI extends JavaPlugin {
         getCommand("flux").setExecutor(new FluxCommand(effectManager));
         effectManager.registerEffect("test_layout", HelloWorldGUI::new);
         effectManager.registerEffect("simple_window", SimpleWindowGUI::new);
+        effectManager.registerEffect("pathtracer", FluxCornellBoxEffect::new);
 
     }
 
