@@ -205,12 +205,12 @@ ImGui::End();
 **FluxUI (Java):**
 ```java
 flux.beginWindow("Hello, world!", 0, 0);
-flux.text("txt_desc", "This is some useful text.");
-show_demo_window = flux.checkbox("chk_demo", "Demo Window", show_demo_window);
-f = flux.sliderFloat("sld_f", "float", f, 0.0f, 1.0f);
-if (flux.button("btn_counter", "Button")) counter++;
+flux.text("This is some useful text.");
+show_demo_window = flux.checkbox("Demo Window", show_demo_window);
+f = flux.sliderFloat("float", f, 0.0f, 1.0f);
+if (flux.button("Button")) counter++;
 flux.sameLine();
-flux.text("txt_cnt", "counter = " + counter);
+flux.text("b_cnt", "counter = " + counter);
 flux.endWindow();
 ```
 
