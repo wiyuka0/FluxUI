@@ -5,6 +5,7 @@ import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.util.Transformation;
@@ -16,8 +17,12 @@ import java.util.*;
 public class BukkitUIPool implements Flux.PoolImpl {
     private final World world;
     private final Location anchorLoc;
+    private final Flux.FluxLocation fluxLoc; // 新增：保存 fluxLoc 以便获取 attachedEntity
     private final Map<String, List<TextDisplay>> entityCache = new HashMap<>();
     private final Set<String> activeNodesThisFrame = new HashSet<>();
+
+    // 新增：变换缓存，与 Fabric 保持一致
+    private final Map<TextDisplay, Transformation> transformCache = new WeakHashMap<>();
 
     private static Matrix4d getShearMatrix(float xy, float xz, float yx, float yz, float zx, float zy) {
         return new Matrix4d(
@@ -50,6 +55,7 @@ public class BukkitUIPool implements Flux.PoolImpl {
     }
 
     public BukkitUIPool(Flux.FluxLocation fluxLoc) {
+        this.fluxLoc = fluxLoc; // 保存 fluxLoc
         this.world = Bukkit.getWorld(fluxLoc.world());
         if (this.world == null) {
             throw new IllegalArgumentException("World not found: " + fluxLoc.world());
@@ -64,6 +70,7 @@ public class BukkitUIPool implements Flux.PoolImpl {
         }
         entityCache.clear();
         activeNodesThisFrame.clear();
+        transformCache.clear(); // 新增：清理缓存
     }
 
     @Override
@@ -83,38 +90,63 @@ public class BukkitUIPool implements Flux.PoolImpl {
         toRemove.forEach(entityCache::remove);
     }
 
+    // 新增：带 Billboard 的方法签名
     @Override
-    public void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks) {
-        drawTextInternal(id, text, worldTransform, opacity, interpTicks, TextDisplay.TextAlignment.CENTER);
+    public void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxBillboard billboard) {
+        drawTextInternal(id, text, worldTransform, opacity, interpTicks, TextDisplay.TextAlignment.CENTER, billboard);
     }
 
+    // 新增：带 Billboard 的方法签名
     @Override
-    public void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment) {
-        drawTextInternal(id, text, worldTransform, opacity, interpTicks, convertAlignment(alignment));
+    public void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment, Flux.FluxBillboard billboard) {
+        drawTextInternal(id, text, worldTransform, opacity, interpTicks, convertAlignment(alignment), billboard);
     }
 
-    private void drawTextInternal(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, TextDisplay.TextAlignment alignment) {
+    private void drawTextInternal(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, TextDisplay.TextAlignment alignment, Flux.FluxBillboard billboard) {
         activeNodesThisFrame.add(id);
         List<TextDisplay> displays = getOrSpawnEntities(id, 1);
         TextDisplay display = displays.get(0);
-        display.setText(text);
+
+        // 字体逻辑：原生 Bukkit 没有直接的 setFont 方法。
+        // 如果你的服务器运行的是 Paper，建议在这里使用 Adventure API (display.text(Component...)) 来设置字体。
+        // 这里保留与 Fabric 类似的判断逻辑作为占位/参考。
+        boolean isCustomIcon = false;
+        for (char c : text.toCharArray()) {
+            if (c >= '\uE000') {
+                isCustomIcon = true;
+                break;
+            }
+        }
+
+        /*
+         * Paper/Adventure API 示例:
+         * net.kyori.adventure.text.Component comp = net.kyori.adventure.text.Component.text(text);
+         * if (isCustomIcon) {
+         *     comp = comp.font(net.kyori.adventure.key.Key.key("hgwar", "ui_pixel_font"));
+         * }
+         * display.text(comp);
+         */
+        display.setText(text); // 原生 Bukkit 降级方案
+
         display.setAlignment(alignment);
         display.setTextOpacity((byte) Math.max(0, Math.min(255, opacity)));
 
-        applyTransformAndColor(display, worldTransform, Color.fromARGB(0, 0, 0, 0), interpTicks, false);
+        applyTransformAndColor(display, worldTransform, Color.fromARGB(0, 0, 0, 0), interpTicks, false, billboard);
     }
 
+    // 新增：带 Billboard 的方法签名
     @Override
-    public void poolDrawRect(String id, Matrix4d worldTransform, Flux.FluxColor fluxColor, int interpTicks) {
+    public void poolDrawRect(String id, Matrix4d worldTransform, Flux.FluxColor fluxColor, int interpTicks, Flux.FluxBillboard billboard) {
         activeNodesThisFrame.add(id);
         List<TextDisplay> displays = getOrSpawnEntities(id, 1);
 
         Matrix4d finalMat = new Matrix4d(worldTransform).mul(UNIT_SQUARE_RECT);
-        applyTransformAndColor(displays.get(0), finalMat, convertColor(fluxColor), interpTicks, false);
+        applyTransformAndColor(displays.get(0), finalMat, convertColor(fluxColor), interpTicks, false, billboard);
     }
 
+    // 新增：带 Billboard 的方法签名
     @Override
-    public void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor fluxColor, int interpTicks) {
+    public void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor fluxColor, int interpTicks, Flux.FluxBillboard billboard) {
         activeNodesThisFrame.add(id);
 
         Vector3d p2 = new Vector3d(point2).sub(point1);
@@ -150,7 +182,7 @@ public class BukkitUIPool implements Flux.PoolImpl {
             display.setText(" ");
 
             Matrix4d pieceMat = new Matrix4d(finalTransform).mul(UNIT_TRIANGLES[i]);
-            applyTransformAndColor(display, pieceMat, bukkitColor, interpTicks, true);
+            applyTransformAndColor(display, pieceMat, bukkitColor, interpTicks, true, billboard);
         }
     }
 
@@ -162,6 +194,14 @@ public class BukkitUIPool implements Flux.PoolImpl {
             for (int i = 0; i < requiredCount; i++) {
                 TextDisplay display = (TextDisplay) world.spawnEntity(anchorLoc, EntityType.TEXT_DISPLAY);
 
+                // 新增：实体骑乘逻辑 (Entity Riding)
+                if (fluxLoc.attachedEntity() != null) {
+                    Entity target = Bukkit.getEntity(fluxLoc.attachedEntity());
+                    if (target != null) {
+                        target.addPassenger(display);
+                    }
+                }
+
                 display.setText(" ");
                 display.setBillboard(Display.Billboard.FIXED);
                 display.setShadowed(false);
@@ -170,20 +210,40 @@ public class BukkitUIPool implements Flux.PoolImpl {
                 display.setBrightness(new Display.Brightness(15, 15));
 
                 list.add(display);
+
+                // 新增：初始化 Transform 缓存
+                transformCache.put(display, display.getTransformation());
             }
             entityCache.put(id, list);
         }
         return list;
     }
 
-    private void applyTransformAndColor(TextDisplay display, Matrix4d targetMatrix, Color color, int interpTicks, boolean useZHack) {
+    // 新增：Billboard 转换方法
+    private Display.Billboard convertBillboard(Flux.FluxBillboard billboard) {
+        if (billboard == null) return Display.Billboard.FIXED;
+        switch (billboard) {
+            case CENTER: return Display.Billboard.CENTER;
+            case HORIZONTAL: return Display.Billboard.HORIZONTAL;
+            case VERTICAL: return Display.Billboard.VERTICAL;
+            case FIXED:
+            default: return Display.Billboard.FIXED;
+        }
+    }
+
+    // 更新：加入 billboard 和 transformCache 逻辑
+    private void applyTransformAndColor(TextDisplay display, Matrix4d targetMatrix, Color color, int interpTicks, boolean useZHack, Flux.FluxBillboard billboard) {
         display.setBackgroundColor(color);
+        display.setBillboard(convertBillboard(billboard)); // 应用 Billboard
 
         if (interpTicks > 0) {
             display.setInterpolationDuration(interpTicks);
         }
 
-        Transformation oldTransformation = display.getTransformation();
+        // 使用缓存获取旧的 Transformation
+        Transformation oldTransformation = transformCache.getOrDefault(display, display.getTransformation());
+
+        // Bukkit 的 setTransformationMatrix 会自动帮我们计算出 Translation, Scale, Left/Right Rotation
         display.setTransformationMatrix(toMatrix4f(targetMatrix));
         Transformation newTransformation = display.getTransformation();
 
@@ -207,16 +267,20 @@ public class BukkitUIPool implements Flux.PoolImpl {
                 Quaternionf rightRot = newTransformation.getRightRotation();
                 rightRot.rotateZ(rot);
 
-                display.setTransformation(new Transformation(
+                newTransformation = new Transformation(
                         newTransformation.getTranslation(),
                         leftRot,
                         scale,
                         rightRot
-                ));
+                );
+                display.setTransformation(newTransformation);
             }
         }
 
-        if (!oldTransformation.equals(display.getTransformation())) {
+        // 更新缓存
+        transformCache.put(display, newTransformation);
+
+        if (!oldTransformation.equals(newTransformation)) {
             display.setInterpolationDelay(0);
         }
     }
@@ -263,6 +327,7 @@ public class BukkitUIPool implements Flux.PoolImpl {
 
         return result;
     }
+
     private Vector3f toVector3f(Vector3d v) {
         return new Vector3f(
                 (float) v.x(),

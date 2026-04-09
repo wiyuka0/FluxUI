@@ -11,20 +11,32 @@ import java.util.function.Consumer;
 public class Flux {
     public record FluxColor(int a, int r, int g, int b) {
         public static FluxColor fromARGB(int a, int r, int g, int b) {
-                return new FluxColor(a, r, g, b);
-            }
+            return new FluxColor(a, r, g, b);
         }
-    public record FluxLocation(String world, double x, double y, double z) {
+    }
+
+    public record FluxLocation(String world, double x, double y, double z, UUID attachedEntity) {
+        public FluxLocation(String world, double x, double y, double z) {
+            this(world, x, y, z, null);
+        }
+
         public double distanceSquared(FluxLocation other) {
-                if (!this.world.equals(other.world)) return Double.MAX_VALUE;
-                double dx = this.x - other.x;
-                double dy = this.y - other.y;
-                double dz = this.z - other.z;
-                return dx * dx + dy * dy + dz * dz;
-            }
+            if (!this.world.equals(other.world)) return Double.MAX_VALUE;
+            if (this.attachedEntity != null || other.attachedEntity != null)
+                return Objects.equals(this.attachedEntity, other.attachedEntity) ? 0 : Double.MAX_VALUE;
+            double dx = this.x - other.x;
+            double dy = this.y - other.y;
+            double dz = this.z - other.z;
+            return dx * dx + dy * dy + dz * dz;
         }
+    }
+
     public enum FluxTextAlignment {
         LEFT, CENTER, RIGHT
+    }
+
+    public enum FluxBillboard {
+        FIXED, CENTER, HORIZONTAL, VERTICAL
     }
 
     // ==========================================
@@ -68,13 +80,13 @@ public class Flux {
             this.layoutFlux = layoutFlux;
         }
 
-        public void layoutBeginWindow(String title, float startX, float startY) {
+        public void layoutBeginWindow(String title, float startX, float startY, FluxBillboard billboard) {
             layoutWindowPos.set(startX, startY);
 
-            layoutFlux.renderer_drawAbsRect("win_bg_" + title, startX, startY, layoutAutoWindowWidth, layoutAutoWindowHeight, layoutColWindowBg);
-            layoutFlux.renderer_drawAbsRect("win_titlebg_" + title, startX, startY, layoutAutoWindowWidth, layoutTITLE_BAR_HEIGHT, layoutColTitleBg);
+            layoutFlux.renderer_drawAbsRect("win_bg_" + title, startX, startY, layoutAutoWindowWidth, layoutAutoWindowHeight, layoutColWindowBg, billboard);
+            layoutFlux.renderer_drawAbsRect("win_titlebg_" + title, startX, startY, layoutAutoWindowWidth, layoutTITLE_BAR_HEIGHT, layoutColTitleBg, billboard);
 
-            layoutDrawTextLeft("win_title_txt_" + title, "▼ " + title, startX + 0.08f, startY - layoutTITLE_BAR_HEIGHT / 2f, layoutTEXT_SCALE);
+            layoutDrawTextLeft("win_title_txt_" + title, "▼ " + title, startX + 0.08f, startY - layoutTITLE_BAR_HEIGHT / 2f, layoutTEXT_SCALE, billboard);
 
             layoutCursorX = layoutWINDOW_PADDING.x;
             layoutCursorY = layoutTITLE_BAR_HEIGHT + layoutWINDOW_PADDING.y;
@@ -127,13 +139,13 @@ public class Flux {
             return new LayoutItemBounds(absX, absY, width, height);
         }
 
-        public void layoutDrawTextLeft(String id, String text, float absLeftX, float absCenterY, float scale) {
+        public void layoutDrawTextLeft(String id, String text, float absLeftX, float absCenterY, float scale, FluxBillboard billboard) {
             float textWidth = layoutCalcTextWidth(text, scale);
-            layoutFlux.renderer_textAbs(id, text, absLeftX + textWidth / 2f, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, FluxTextAlignment.CENTER);
+            layoutFlux.renderer_textAbs(id, text, absLeftX + textWidth / 2f, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, FluxTextAlignment.CENTER, billboard);
         }
 
-        public void layoutDrawTextCenter(String id, String text, float absCenterX, float absCenterY, float scale) {
-            layoutFlux.renderer_textAbs(id, text, absCenterX, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, FluxTextAlignment.CENTER);
+        public void layoutDrawTextCenter(String id, String text, float absCenterX, float absCenterY, float scale, FluxBillboard billboard) {
+            layoutFlux.renderer_textAbs(id, text, absCenterX, absCenterY + layoutTEXT_OFFSET_Y, scale, 255, FluxTextAlignment.CENTER, billboard);
         }
 
         public float layoutCalcTextWidth(String text, float scale) {
@@ -191,6 +203,7 @@ public class Flux {
             return pixels * layoutTEXT_WIDTH_RATIO * scale;
         }
     }
+
     private static class FluxRenderer {
         private final Map<String, UIPool> renderer_activeScreens = new HashMap<>();
         private final Map<String, FluxLocation> renderer_screenLocations = new HashMap<>();
@@ -202,7 +215,7 @@ public class Flux {
 
         private int renderer_currentInterpTicks = 0;
         private float renderer_microZOffset = 0.0f;
-        private static final float renderer_MICRO_Z_STEP = 0.000f;
+        private float renderer_zStep = 0.000f;
         private static final float renderer_MAX_INTERACT_DISTANCE = 10.0f;
 
         private final Consumer<FluxRenderer> renderer_renderLogic;
@@ -290,6 +303,9 @@ public class Flux {
         private void renderer_consumeClicks() {
             renderer_playerInputs.values().forEach(state -> state.renderer_clicking = false);
         }
+        public void renderer_zStep(float z) {
+            this.renderer_zStep = z;
+        }
 
         public boolean renderer_area(String id) {
             renderer_idStack.push(id);
@@ -307,26 +323,30 @@ public class Flux {
             renderer_idStack.push(screenId);
             FluxLocation originalLoc = renderer_screenLocations.get(screenId);
 
-            if (originalLoc == null || !originalLoc.world.equals(loc.world) || originalLoc.distanceSquared(loc) > 4096.0f) {
+            if (originalLoc == null || !originalLoc.world().equals(loc.world()) || originalLoc.distanceSquared(loc) > 4096.0f) {
                 if (originalLoc != null) {
                     UIPool oldPool = renderer_activeScreens.remove(screenId);
                     if (oldPool != null) oldPool.pool_destroy();
                 }
-                originalLoc = new FluxLocation(loc.world, loc.x, loc.y, loc.z);
+                originalLoc = new FluxLocation(loc.world(), loc.x(), loc.y(), loc.z(), loc.attachedEntity());
                 renderer_screenLocations.put(screenId, originalLoc);
                 renderer_activeScreens.put(screenId, new UIPool(originalLoc));
             }
-            renderer_currentAnchor = new Vector3d(originalLoc.x, originalLoc.y, originalLoc.z);
+            renderer_currentAnchor = new Vector3d(originalLoc.x(), originalLoc.y(), originalLoc.z());
 
             UIPool pool = renderer_activeScreens.get(screenId);
             renderer_screensRenderedThisTick.add(screenId);
             renderer_currentPool = pool;
 
             Vector3d delta = new Vector3d(
-                    loc.x - originalLoc.x,
-                    loc.y - originalLoc.y,
-                    loc.z - originalLoc.z
+                    loc.x() - originalLoc.x(),
+                    loc.y() - originalLoc.y(),
+                    loc.z() - originalLoc.z()
             );
+
+            if (loc.attachedEntity() != null) {
+                delta.set(0, 0, 0);
+            }
 
             Quaterniond rotation = new Quaterniond().lookAlong(new Vector3d(zAxis).mul(-1f), yAxis).conjugate();
             Matrix4d baseTransform = new Matrix4d().translate(delta).rotate(rotation);
@@ -366,64 +386,54 @@ public class Flux {
             renderer_matrixStack.peek().mul(shearMat);
         }
 
-        public void renderer_drawAbsRect(String id, float x, float y, float w, float h, FluxColor color) {
+        public void renderer_drawAbsRect(String id, float x, float y, float w, float h, FluxColor color, FluxBillboard billboard) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(x, y - h, safeZ).scale(w, h, 1f);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.pool_drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks, billboard);
         }
 
-        public void renderer_drawAbsTriangle(String id, float x1, float y1, float x2, float y2, float x3, float y3, FluxColor color) {
+        public void renderer_drawAbsTriangle(String id, float x1, float y1, float x2, float y2, float x3, float y3, FluxColor color, FluxBillboard billboard) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
             Vector3d p1 = new Vector3d(x1, y1, safeZ);
             Vector3d p2 = new Vector3d(x2, y2, safeZ);
             Vector3d p3 = new Vector3d(x3, y3, safeZ);
-            renderer_currentPool.pool_drawTriangle(renderer_genFullId(id), p1, p2, p3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawTriangle(renderer_genFullId(id), p1, p2, p3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks, billboard);
         }
 
-        public void renderer_text(String id, String text, float scale) { renderer_text(id, text, scale, 255); }
-
-        public void renderer_text(String id, String text, float scale, int opacity) {
+        public void renderer_text(String id, String text, float scale, int opacity, FluxTextAlignment alignment, FluxBillboard billboard) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(scale, scale, scale);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, alignment, billboard);
         }
 
-        public void renderer_text(String id, String text, float scale, int opacity, FluxTextAlignment alignment) {
-            if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
-            float safeZ = renderer_getAndAdvanceMicroZ();
-            Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(scale, scale, scale);
-            Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, alignment);
-        }
-
-        public void renderer_textAbs(String id, String text, float x, float y, float scale, int opacity, FluxTextAlignment align) {
+        public void renderer_textAbs(String id, String text, float x, float y, float scale, int opacity, FluxTextAlignment align, FluxBillboard billboard) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(x, y, safeZ).scale(scale, scale, scale);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, align);
+            renderer_currentPool.pool_drawText(renderer_genFullId(id), text, finalWorldMatrix, opacity, renderer_currentInterpTicks, align, billboard);
         }
 
-        public void renderer_rect(String id, float width, float height, FluxColor color) {
+        public void renderer_rect(String id, float width, float height, FluxColor color, FluxBillboard billboard) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
             Matrix4d localTransform = new Matrix4d().translate(0, 0, safeZ).scale(width, height, 1f);
             Matrix4d finalWorldMatrix = new Matrix4d(renderer_matrixStack.peek()).mul(localTransform);
-            renderer_currentPool.pool_drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawRect(renderer_genFullId(id), finalWorldMatrix, color, renderer_currentInterpTicks, billboard);
         }
 
-        public void renderer_triangle(String id, Vector3d p1, Vector3d p2, Vector3d p3, FluxColor color) {
+        public void renderer_triangle(String id, Vector3d p1, Vector3d p2, Vector3d p3, FluxColor color, FluxBillboard billboard) {
             if (renderer_currentPool == null || renderer_matrixStack.isEmpty()) return;
             float safeZ = renderer_getAndAdvanceMicroZ();
             Vector3d op1 = new Vector3d(p1).add(0, 0, safeZ);
             Vector3d op2 = new Vector3d(p2).add(0, 0, safeZ);
             Vector3d op3 = new Vector3d(p3).add(0, 0, safeZ);
-            renderer_currentPool.pool_drawTriangle(renderer_genFullId(id), op1, op2, op3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks);
+            renderer_currentPool.pool_drawTriangle(renderer_genFullId(id), op1, op2, op3, renderer_matrixStack.peek(), color, renderer_currentInterpTicks, billboard);
         }
 
         public Set<UUID> renderer_getHoveringPlayers(float width, float height) {
@@ -490,10 +500,11 @@ public class Flux {
 
         private float renderer_getAndAdvanceMicroZ() {
             float z = renderer_microZOffset;
-            renderer_microZOffset += renderer_MICRO_Z_STEP;
+            renderer_microZOffset += renderer_zStep;
             return z;
         }
     }
+
     private static class FluxControllers {
         private final FluxRenderer controllerFlux;
         private final FluxLayout controllerLayout;
@@ -509,27 +520,27 @@ public class Flux {
             this.controllerPlayerId = playerId;
         }
 
-        public void controllerText(String id, String text) {
+        public void controllerText(String id, String text, FluxBillboard billboard) {
             float textWidth = controllerLayout.layoutCalcTextWidth(text, controllerLayout.layoutTEXT_SCALE);
             FluxLayout.LayoutItemBounds bounds = controllerLayout.layoutAllocateSpace(textWidth, controllerLayout.layoutFRAME_HEIGHT);
-            controllerLayout.layoutDrawTextLeft(id, text, bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerLayout.layoutDrawTextLeft(id, text, bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
         }
 
-        public boolean controllerButton(String id, String text) {
+        public boolean controllerButton(String id, String text, FluxBillboard billboard) {
             float textWidth = controllerLayout.layoutCalcTextWidth(text, controllerLayout.layoutTEXT_SCALE);
             float width = textWidth + (controllerLayout.layoutFRAME_PADDING.x * 2);
 
             FluxLayout.LayoutItemBounds bounds = controllerLayout.layoutAllocateSpace(width, controllerLayout.layoutFRAME_HEIGHT);
 
-            controllerFlux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, controllerLayout.layoutColButton);
-            controllerLayout.layoutDrawTextCenter(id + "_txt", text, bounds.layoutItemBoundsAbsX + bounds.layoutItemBoundsW / 2f, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerFlux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, controllerLayout.layoutColButton, billboard);
+            controllerLayout.layoutDrawTextCenter(id + "_txt", text, bounds.layoutItemBoundsAbsX + bounds.layoutItemBoundsW / 2f, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
 
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
 
             boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
             FluxColor hoverOverlay = isHovered ? FluxColor.fromARGB(50, 255, 255, 255) : FluxColor.fromARGB(0, 0, 0, 0);
-            controllerFlux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay);
+            controllerFlux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay, billboard);
 
             boolean clicked = controllerFlux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(controllerPlayerId);
             controllerFlux.renderer_popMatrix();
@@ -537,7 +548,7 @@ public class Flux {
             return clicked;
         }
 
-        public boolean controllerButtonAbs(String id, String text, float x, float y) {
+        public boolean controllerButtonAbs(String id, String text, float x, float y, FluxBillboard billboard) {
             float textWidth = controllerLayout.layoutCalcTextWidth(text, controllerLayout.layoutTEXT_SCALE);
             float width = textWidth + (controllerLayout.layoutFRAME_PADDING.x * 2);
             float height = controllerLayout.layoutFRAME_HEIGHT;
@@ -545,12 +556,12 @@ public class Flux {
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(x, y, 0);
 
-            controllerFlux.renderer_rect(id + "_bg", width, height, controllerLayout.layoutColButton);
-            controllerFlux.renderer_textAbs(id + "_txt", text, width / 2f, -height / 2f, controllerLayout.layoutTEXT_SCALE, 255, FluxTextAlignment.CENTER);
+            controllerFlux.renderer_rect(id + "_bg", width, height, controllerLayout.layoutColButton, billboard);
+            controllerFlux.renderer_textAbs(id + "_txt", text, width / 2f, -height / 2f, controllerLayout.layoutTEXT_SCALE, 255, FluxTextAlignment.CENTER, billboard);
 
             boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, width, height);
             if (isHovered) {
-                controllerFlux.renderer_rect(id + "_hover", width, height, FluxColor.fromARGB(50, 255, 255, 255));
+                controllerFlux.renderer_rect(id + "_hover", width, height, FluxColor.fromARGB(50, 255, 255, 255), billboard);
             }
             boolean clicked = controllerFlux.renderer_hitbox(width, height).contains(controllerPlayerId);
 
@@ -558,49 +569,49 @@ public class Flux {
             return clicked;
         }
 
-        public boolean controllerCheckboxAbs(String id, String label, boolean state, float x, float y) {
+        public boolean controllerCheckboxAbs(String id, String label, boolean state, float x, float y, FluxBillboard billboard) {
             float boxSize = controllerLayout.layoutFRAME_HEIGHT * 0.85f;
             float textWidth = controllerLayout.layoutCalcTextWidth(label, controllerLayout.layoutTEXT_SCALE);
             float totalWidth = boxSize + controllerLayout.layoutITEM_SPACING.x + textWidth;
             float height = controllerLayout.layoutFRAME_HEIGHT;
             float boxOffsetY = (height - boxSize) / 2f;
-            controllerFlux.renderer_drawAbsRect(id + "_bg", x, y - boxOffsetY, boxSize, boxSize, controllerLayout.layoutColFrameBg);
+            controllerFlux.renderer_drawAbsRect(id + "_bg", x, y - boxOffsetY, boxSize, boxSize, controllerLayout.layoutColFrameBg, billboard);
             if (state) {
                 float pad = 0.04f;
-                controllerFlux.renderer_drawAbsRect(id + "_tick", x + pad, y - boxOffsetY - pad, boxSize - pad * 2, boxSize - pad * 2, controllerLayout.layoutColSliderGrab);
+                controllerFlux.renderer_drawAbsRect(id + "_tick", x + pad, y - boxOffsetY - pad, boxSize - pad * 2, boxSize - pad * 2, controllerLayout.layoutColSliderGrab, billboard);
             }
-            controllerLayout.layoutDrawTextLeft(id + "_txt", label, x + boxSize + controllerLayout.layoutITEM_SPACING.x, y - height / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerLayout.layoutDrawTextLeft(id + "_txt", label, x + boxSize + controllerLayout.layoutITEM_SPACING.x, y - height / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(x, y - height, 0);
             boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, totalWidth, height);
             FluxColor hoverOverlay = isHovered ? FluxColor.fromARGB(30, 255, 255, 255) : FluxColor.fromARGB(0, 0, 0, 0);
-            controllerFlux.renderer_rect(id + "_hover", totalWidth, height, hoverOverlay);
+            controllerFlux.renderer_rect(id + "_hover", totalWidth, height, hoverOverlay, billboard);
             if (controllerFlux.renderer_hitbox(totalWidth, height).contains(controllerPlayerId)) state = !state;
             controllerFlux.renderer_popMatrix();
             return state;
         }
 
-        public float ControllerSliderFloatAbs(String id, String label, float value, float min, float max, float x, float y) {
+        public float controllerSliderFloatAbs(String id, String label, float value, float min, float max, float x, float y, FluxBillboard billboard) {
             float trackW = 2.5f;
             float height = controllerLayout.layoutFRAME_HEIGHT;
 
-            controllerFlux.renderer_drawAbsRect(id + "_bg", x, y, trackW, height, controllerLayout.layoutColFrameBg);
+            controllerFlux.renderer_drawAbsRect(id + "_bg", x, y, trackW, height, controllerLayout.layoutColFrameBg, billboard);
 
             float percent = Math.max(0, Math.min(1, (value - min) / (max - min)));
             float fillW = percent * trackW;
             if (fillW > 0) {
-                controllerFlux.renderer_drawAbsRect(id + "_fill", x, y, fillW, height, controllerLayout.layoutColSliderGrab);
+                controllerFlux.renderer_drawAbsRect(id + "_fill", x, y, fillW, height, controllerLayout.layoutColSliderGrab, billboard);
             }
             String valText = String.format("%.3f", value);
-            controllerLayout.layoutDrawTextCenter(id + "_val", valText, x + trackW / 2f, y - height / 2f, controllerLayout.layoutTEXT_SCALE);
-            controllerLayout.layoutDrawTextLeft(id + "_txt", label, x + trackW + controllerLayout.layoutITEM_SPACING.x, y - height / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerLayout.layoutDrawTextCenter(id + "_val", valText, x + trackW / 2f, y - height / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
+            controllerLayout.layoutDrawTextLeft(id + "_txt", label, x + trackW + controllerLayout.layoutITEM_SPACING.x, y - height / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
 
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(x, y - height, 0);
 
             boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, trackW, height);
             if (isHovered) {
-                controllerFlux.renderer_rect(id + "_hover", trackW, height, FluxColor.fromARGB(30, 255, 255, 255));
+                controllerFlux.renderer_rect(id + "_hover", trackW, height, FluxColor.fromARGB(30, 255, 255, 255), billboard);
             }
             if (controllerFlux.renderer_hitbox(trackW / 2, height).contains(controllerPlayerId)) {
                 value = Math.max(min, value - (max - min) * 0.05f);
@@ -615,28 +626,28 @@ public class Flux {
             return value;
         }
 
-        public boolean controllerCheckbox(String id, String label, boolean state) {
+        public boolean controllerCheckbox(String id, String label, boolean state, FluxBillboard billboard) {
             float boxSize = controllerLayout.layoutFRAME_HEIGHT * 0.85f;
             float textWidth = controllerLayout.layoutCalcTextWidth(label, controllerLayout.layoutTEXT_SCALE);
 
             FluxLayout.LayoutItemBounds bounds = controllerLayout.layoutAllocateSpace(boxSize + controllerLayout.layoutITEM_SPACING.x + textWidth, controllerLayout.layoutFRAME_HEIGHT);
             float boxOffsetY = (controllerLayout.layoutFRAME_HEIGHT - boxSize) / 2f;
 
-            controllerFlux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, controllerLayout.layoutColFrameBg);
+            controllerFlux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, controllerLayout.layoutColFrameBg, billboard);
 
             if (state) {
                 float pad = 0.04f;
-                controllerFlux.renderer_drawAbsRect(id + "_tick", bounds.layoutItemBoundsAbsX + pad, bounds.layoutItemBoundsAbsY - boxOffsetY - pad, boxSize - pad * 2, boxSize - pad * 2, controllerLayout.layoutColSliderGrab);
+                controllerFlux.renderer_drawAbsRect(id + "_tick", bounds.layoutItemBoundsAbsX + pad, bounds.layoutItemBoundsAbsY - boxOffsetY - pad, boxSize - pad * 2, boxSize - pad * 2, controllerLayout.layoutColSliderGrab, billboard);
             }
 
-            controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - controllerLayout.layoutFRAME_HEIGHT / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - controllerLayout.layoutFRAME_HEIGHT / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
 
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
 
             boolean isHovered = controllerFlux.renderer_isHovered(controllerPlayerId, bounds.layoutItemBoundsW, bounds.layoutItemBoundsH);
             FluxColor hoverOverlay = isHovered ? FluxColor.fromARGB(30, 255, 255, 255) : FluxColor.fromARGB(0, 0, 0, 0);
-            controllerFlux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay);
+            controllerFlux.renderer_rect(id + "_hover", bounds.layoutItemBoundsW, bounds.layoutItemBoundsH, hoverOverlay, billboard);
 
             if (controllerFlux.renderer_hitbox(bounds.layoutItemBoundsW, bounds.layoutItemBoundsH).contains(controllerPlayerId)) {
                 state = !state;
@@ -646,23 +657,23 @@ public class Flux {
             return state;
         }
 
-        public float controllerSliderFloat(String id, String label, float value, float min, float max) {
+        public float controllerSliderFloat(String id, String label, float value, float min, float max, FluxBillboard billboard) {
             float trackW = 2.5f;
             float textWidth = controllerLayout.layoutCalcTextWidth(label, controllerLayout.layoutTEXT_SCALE);
 
             FluxLayout.LayoutItemBounds bounds = controllerLayout.layoutAllocateSpace(trackW + controllerLayout.layoutITEM_SPACING.x + textWidth, controllerLayout.layoutFRAME_HEIGHT);
 
-            controllerFlux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, trackW, bounds.layoutItemBoundsH, controllerLayout.layoutColFrameBg);
+            controllerFlux.renderer_drawAbsRect(id + "_bg", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, trackW, bounds.layoutItemBoundsH, controllerLayout.layoutColFrameBg, billboard);
 
             float percent = Math.max(0, Math.min(1, (value - min) / (max - min)));
             float fillW = percent * trackW;
             if (fillW > 0) {
-                controllerFlux.renderer_drawAbsRect(id + "_fill", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, fillW, bounds.layoutItemBoundsH, controllerLayout.layoutColSliderGrab);
+                controllerFlux.renderer_drawAbsRect(id + "_fill", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY, fillW, bounds.layoutItemBoundsH, controllerLayout.layoutColSliderGrab, billboard);
             }
 
             String valText = String.format("%.3f", value);
-            controllerLayout.layoutDrawTextCenter(id + "_val", valText, bounds.layoutItemBoundsAbsX + trackW / 2f, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE);
-            controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + trackW + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerLayout.layoutDrawTextCenter(id + "_val", valText, bounds.layoutItemBoundsAbsX + trackW / 2f, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
+            controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + trackW + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
 
             controllerFlux.renderer_pushMatrix();
             controllerFlux.renderer_translate(bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - bounds.layoutItemBoundsH, 0);
@@ -678,16 +689,16 @@ public class Flux {
             return value;
         }
 
-        public void controllerColorEdit3(String id, String label, FluxColor color) {
+        public void controllerColorEdit3(String id, String label, FluxColor color, FluxBillboard billboard) {
             float boxSize = controllerLayout.layoutFRAME_HEIGHT;
             float textWidth = controllerLayout.layoutCalcTextWidth(label, controllerLayout.layoutTEXT_SCALE);
 
             FluxLayout.LayoutItemBounds bounds = controllerLayout.layoutAllocateSpace(boxSize + controllerLayout.layoutITEM_SPACING.x + textWidth, controllerLayout.layoutFRAME_HEIGHT);
 
             float boxOffsetY = (controllerLayout.layoutFRAME_HEIGHT - boxSize) / 2f;
-            controllerFlux.renderer_drawAbsRect(id + "_preview", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, color);
+            controllerFlux.renderer_drawAbsRect(id + "_preview", bounds.layoutItemBoundsAbsX, bounds.layoutItemBoundsAbsY - boxOffsetY, boxSize, boxSize, color, billboard);
 
-            controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - controllerLayout.layoutFRAME_HEIGHT / 2f, controllerLayout.layoutTEXT_SCALE);
+            controllerLayout.layoutDrawTextLeft(id + "_txt", label, bounds.layoutItemBoundsAbsX + boxSize + controllerLayout.layoutITEM_SPACING.x, bounds.layoutItemBoundsAbsY - controllerLayout.layoutFRAME_HEIGHT / 2f, controllerLayout.layoutTEXT_SCALE, billboard);
         }
     }
 
@@ -695,36 +706,30 @@ public class Flux {
         void poolBeginFrame();
         void poolEndFrame();
         void poolDestroy();
-        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks);
-        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment);
-        void poolDrawRect(String id, Matrix4d worldTransform, Flux.FluxColor color, int interpTicks);
-        void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor color, int interpTicks);
+        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, FluxBillboard billboard);
+        void poolDrawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, FluxTextAlignment alignment, FluxBillboard billboard);
+        void poolDrawRect(String id, Matrix4d worldTransform, FluxColor color, int interpTicks, FluxBillboard billboard);
+        void poolDrawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, FluxColor color, int interpTicks, FluxBillboard billboard);
     }
 
     public static void setPoolFactory(UIPool.poolFactory f) {
         UIPool.setPoolFactory(f);
     }
+
     public static class UIPool {
         public interface poolFactory {
-            PoolImpl pool_create(Flux.FluxLocation location);
+            PoolImpl pool_create(FluxLocation location);
         }
 
         private static poolFactory pool_factory;
 
-        /**
-         * 在插件启动时 (onEnable) 调用此方法注入 Bukkit 实现
-         */
         private static void setPoolFactory(poolFactory f) {
             pool_factory = f;
         }
 
-        // ==========================================
-        // 代理逻辑
-        // ==========================================
-
         private final PoolImpl pool_impl;
 
-        public UIPool(Flux.FluxLocation location) {
+        public UIPool(FluxLocation location) {
             if (pool_factory == null) {
                 throw new IllegalStateException("UIPool factory is not set! Please call UIPool.setFactory() before using Flux.");
             }
@@ -735,20 +740,16 @@ public class Flux {
         public void pool_endFrame() { pool_impl.poolEndFrame(); }
         public void pool_destroy() { pool_impl.poolDestroy(); }
 
-        public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks) {
-            pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks);
+        public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, FluxTextAlignment alignment, FluxBillboard billboard) {
+            pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks, alignment, billboard);
         }
 
-        public void pool_drawText(String id, String text, Matrix4d worldTransform, int opacity, int interpTicks, Flux.FluxTextAlignment alignment) {
-            pool_impl.poolDrawText(id, text, worldTransform, opacity, interpTicks, alignment);
+        public void pool_drawRect(String id, Matrix4d worldTransform, FluxColor color, int interpTicks, FluxBillboard billboard) {
+            pool_impl.poolDrawRect(id, worldTransform, color, interpTicks, billboard);
         }
 
-        public void pool_drawRect(String id, Matrix4d worldTransform, Flux.FluxColor color, int interpTicks) {
-            pool_impl.poolDrawRect(id, worldTransform, color, interpTicks);
-        }
-
-        public void pool_drawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, Flux.FluxColor color, int interpTicks) {
-            pool_impl.poolDrawTriangle(id, point1, point2, point3, worldBaseMatrix, color, interpTicks);
+        public void pool_drawTriangle(String id, Vector3d point1, Vector3d point2, Vector3d point3, Matrix4d worldBaseMatrix, FluxColor color, int interpTicks, FluxBillboard billboard) {
+            pool_impl.poolDrawTriangle(id, point1, point2, point3, worldBaseMatrix, color, interpTicks, billboard);
         }
     }
 
@@ -774,12 +775,6 @@ public class Flux {
     public void tick() { renderer.renderer_tick(); }
     public void destroy() { renderer.renderer_destroy(); }
 
-    /**
-     * 更新玩家射线 (由外部平台传入)
-     * @param playerId 玩家 UUID
-     * @param origin 射线起点 (如玩家眼睛坐标)
-     * @param direction 射线方向
-     */
     public void updatePlayerRay(UUID playerId, Vector3d origin, Vector3d direction) {
         renderer.renderer_updatePlayerRay(playerId, origin, direction);
     }
@@ -807,34 +802,65 @@ public class Flux {
     // ==========================================
     // 窗口与排版系统
     // ==========================================
-    public void beginWindow(String title, float startX, float startY) { layout.layoutBeginWindow(title, startX, startY); }
+    public void beginWindow(String title, float startX, float startY, FluxBillboard billboard) { layout.layoutBeginWindow(title, startX, startY, billboard); }
+    public void beginWindow(String title, float startX, float startY) { beginWindow(title, startX, startY, FluxBillboard.FIXED); }
     public void endWindow() { layout.layoutEndWindow(); }
     public void sameLine() { layout.layoutSameLine(); }
+    public void zStep(float z) { renderer.renderer_zStep(z); }
 
     // ==========================================
-    // 交互控件
+    // 交互控件 (带 ID)
     // ==========================================
-    public void     text        (String id, String text) { controllers.controllerText(id, text); }
-    public boolean  button      (String id, String text) { return controllers.controllerButton(id, text); }
-    public boolean  checkbox    (String id, String label, boolean state) { return controllers.controllerCheckbox(id, label, state); }
-    public void     colorEdit3  (String id, String label, FluxColor color)   { controllers.controllerColorEdit3(id, label, color); }
-    public float    sliderFloat (String id, String label, float value, float min, float max) { return controllers.controllerSliderFloat(id, label, value, min, max); }
+    public void     text        (String id, String text, FluxBillboard billboard) { controllers.controllerText(id, text, billboard); }
+    public void     text        (String id, String text) { text(id, text, FluxBillboard.FIXED); }
+
+    public boolean  button      (String id, String text, FluxBillboard billboard) { return controllers.controllerButton(id, text, billboard); }
+    public boolean  button      (String id, String text) { return button(id, text, FluxBillboard.FIXED); }
+
+    public boolean  checkbox    (String id, String label, boolean state, FluxBillboard billboard) { return controllers.controllerCheckbox(id, label, state, billboard); }
+    public boolean  checkbox    (String id, String label, boolean state) { return checkbox(id, label, state, FluxBillboard.FIXED); }
+
+    public void     colorEdit3  (String id, String label, FluxColor color, FluxBillboard billboard) { controllers.controllerColorEdit3(id, label, color, billboard); }
+    public void     colorEdit3  (String id, String label, FluxColor color) { colorEdit3(id, label, color, FluxBillboard.FIXED); }
+
+    public float    sliderFloat (String id, String label, float value, float min, float max, FluxBillboard billboard) { return controllers.controllerSliderFloat(id, label, value, min, max, billboard); }
+    public float    sliderFloat (String id, String label, float value, float min, float max) { return sliderFloat(id, label, value, min, max, FluxBillboard.FIXED); }
 
     // ==========================================
-    // 基础图形与文本
+    // 基础图形与文本 (带 ID)
     // ==========================================
-    public void text            (String id, String text,    float scale)                    { renderer.renderer_text(id, text, scale); }
-    public void text            (String id, String text,    float scale,    int opacity)    { renderer.renderer_text(id, text, scale, opacity); }
-    public boolean buttonAbs    (String id, String text,    float x,        float y)        { return controllers.controllerButtonAbs(id, text, x, y);}
-    public void rect            (String id, float width,    float height,   FluxColor color)    { renderer.renderer_rect(id, width, height, color); }
+    public void text            (String id, String text, float scale, FluxBillboard billboard) { renderer.renderer_text(id, text, scale, 255, FluxTextAlignment.CENTER, billboard); }
+    public void text            (String id, String text, float scale) { text(id, text, scale, FluxBillboard.FIXED); }
 
-    public boolean checkboxAbs  (String id, String label,   boolean state,  float x,        float y)                            { return controllers.controllerCheckboxAbs(id, label, state, x, y); }
-    public void triangle        (String id, Vector3d p1,    Vector3d p2,    Vector3d p3,    FluxColor color)                        { renderer.renderer_triangle(id, p1, p2, p3, color); }
-    public void text            (String id, String text,    float scale,    int opacity,    FluxTextAlignment align)    { renderer.renderer_text(id, text, scale, opacity, align); }
-    public void drawAbsRect     (String id, float x,        float y,        float w,        float h,            FluxColor color)    { renderer.renderer_drawAbsRect(id, x, y, w, h, color); }
-    public void textAbs         (String id, String text,    float x,        float y,        float scale,        int opacity,    FluxTextAlignment align) { renderer.renderer_textAbs(id, text, x, y, scale, opacity, align); }
-    public void drawAbsTriangle (String id, float x1,       float y1,       float x2,       float y2,           float x3,       float y3, FluxColor color) { renderer.renderer_drawAbsTriangle(id, x1, y1, x2, y2, x3, y3, color); }
-    public float sliderFloatAbs (String id, String label,   float value,    float min,      float max,          float x,        float y) { return controllers.ControllerSliderFloatAbs(id, label, value, min, max, x, y); }
+    public void text            (String id, String text, float scale, int opacity, FluxBillboard billboard) { renderer.renderer_text(id, text, scale, opacity, FluxTextAlignment.CENTER, billboard); }
+    public void text            (String id, String text, float scale, int opacity) { text(id, text, scale, opacity, FluxBillboard.FIXED); }
+
+    public void text            (String id, String text, float scale, int opacity, FluxTextAlignment align, FluxBillboard billboard) { renderer.renderer_text(id, text, scale, opacity, align, billboard); }
+    public void text            (String id, String text, float scale, int opacity, FluxTextAlignment align) { text(id, text, scale, opacity, align, FluxBillboard.FIXED); }
+
+    public boolean buttonAbs    (String id, String text, float x, float y, FluxBillboard billboard) { return controllers.controllerButtonAbs(id, text, x, y, billboard); }
+    public boolean buttonAbs    (String id, String text, float x, float y) { return buttonAbs(id, text, x, y, FluxBillboard.FIXED); }
+
+    public void rect            (String id, float width, float height, FluxColor color, FluxBillboard billboard) { renderer.renderer_rect(id, width, height, color, billboard); }
+    public void rect            (String id, float width, float height, FluxColor color) { rect(id, width, height, color, FluxBillboard.FIXED); }
+
+    public boolean checkboxAbs  (String id, String label, boolean state, float x, float y, FluxBillboard billboard) { return controllers.controllerCheckboxAbs(id, label, state, x, y, billboard); }
+    public boolean checkboxAbs  (String id, String label, boolean state, float x, float y) { return checkboxAbs(id, label, state, x, y, FluxBillboard.FIXED); }
+
+    public void triangle        (String id, Vector3d p1, Vector3d p2, Vector3d p3, FluxColor color, FluxBillboard billboard) { renderer.renderer_triangle(id, p1, p2, p3, color, billboard); }
+    public void triangle        (String id, Vector3d p1, Vector3d p2, Vector3d p3, FluxColor color) { triangle(id, p1, p2, p3, color, FluxBillboard.FIXED); }
+
+    public void drawAbsRect     (String id, float x, float y, float w, float h, FluxColor color, FluxBillboard billboard) { renderer.renderer_drawAbsRect(id, x, y, w, h, color, billboard); }
+    public void drawAbsRect     (String id, float x, float y, float w, float h, FluxColor color) { drawAbsRect(id, x, y, w, h, color, FluxBillboard.FIXED); }
+
+    public void textAbs         (String id, String text, float x, float y, float scale, int opacity, FluxTextAlignment align, FluxBillboard billboard) { renderer.renderer_textAbs(id, text, x, y, scale, opacity, align, billboard); }
+    public void textAbs         (String id, String text, float x, float y, float scale, int opacity, FluxTextAlignment align) { textAbs(id, text, x, y, scale, opacity, align, FluxBillboard.FIXED); }
+
+    public void drawAbsTriangle (String id, float x1, float y1, float x2, float y2, float x3, float y3, FluxColor color, FluxBillboard billboard) { renderer.renderer_drawAbsTriangle(id, x1, y1, x2, y2, x3, y3, color, billboard); }
+    public void drawAbsTriangle (String id, float x1, float y1, float x2, float y2, float x3, float y3, FluxColor color) { drawAbsTriangle(id, x1, y1, x2, y2, x3, y3, color, FluxBillboard.FIXED); }
+
+    public float sliderFloatAbs (String id, String label, float value, float min, float max, float x, float y, FluxBillboard billboard) { return controllers.controllerSliderFloatAbs(id, label, value, min, max, x, y, billboard); }
+    public float sliderFloatAbs (String id, String label, float value, float min, float max, float x, float y) { return sliderFloatAbs(id, label, value, min, max, x, y, FluxBillboard.FIXED); }
 
     // ==========================================
     // 底层碰撞检测
@@ -847,26 +873,42 @@ public class Flux {
     // ==========================================
     // 交互控件 (无 ID 重载版，自动哈希 text/label)
     // ==========================================
-    public void     text        (String text)                                           { this.text(hashId(text), text); }
-    public boolean  button      (String text)                                           { return this.button(hashId(text), text); }
-    public boolean  checkbox    (String label, boolean state)                           { return this.checkbox(hashId(label), label, state); }
-    public void     colorEdit3  (String label, FluxColor color)                         { this.colorEdit3(hashId(label), label, color); }
-    public float    sliderFloat (String label, float value, float min, float max)       { return this.sliderFloat(hashId(label), label, value, min, max); }
+    public void     text        (String text, FluxBillboard billboard) { this.text(hashId(text), text, billboard); }
+    public void     text        (String text) { this.text(hashId(text), text); }
 
-    // ==========================================
-    // 基础图形与文本 (无 ID 重载版，自动哈希 text/label)
-    // ==========================================
-    public void     text            (String text,   float scale)                                { this.text(hashId(text), text, scale); }
-    public void     text            (String text,   float scale,    int opacity)                { this.text(hashId(text), text, scale, opacity); }
-    public boolean  buttonAbs       (String text,   float x,        float y)                    { return this.buttonAbs(hashId(text), text, x, y); }
+    public boolean  button      (String text, FluxBillboard billboard) { return this.button(hashId(text), text, billboard); }
+    public boolean  button      (String text) { return this.button(hashId(text), text); }
 
-    public boolean  checkboxAbs     (String label,  boolean state,  float x,        float y)    { return this.checkboxAbs(hashId(label), label, state, x, y); }
-    public void     text            (String text,   float scale,    int opacity,    FluxTextAlignment align) { this.text(hashId(text), text, scale, opacity, align); }
-    public void     textAbs         (String text,   float x,        float y,        float scale,        int opacity,    FluxTextAlignment align) { this.textAbs(hashId(text), text, x, y, scale, opacity, align); }
-    public float    sliderFloatAbs  (String label,  float value,    float min,      float max,          float x,        float y) { return this.sliderFloatAbs(hashId(label), label, value, min, max, x, y); }
-    // ==========================================
-    // 内部辅助方法：生成隐式 ID
-    // ==========================================
+    public boolean  checkbox    (String label, boolean state, FluxBillboard billboard) { return this.checkbox(hashId(label), label, state, billboard); }
+    public boolean  checkbox    (String label, boolean state) { return this.checkbox(hashId(label), label, state); }
+
+    public void     colorEdit3  (String label, FluxColor color, FluxBillboard billboard) { this.colorEdit3(hashId(label), label, color, billboard); }
+    public void     colorEdit3  (String label, FluxColor color) { this.colorEdit3(hashId(label), label, color); }
+
+    public float    sliderFloat (String label, float value, float min, float max, FluxBillboard billboard) { return this.sliderFloat(hashId(label), label, value, min, max, billboard); }
+    public float    sliderFloat (String label, float value, float min, float max) { return this.sliderFloat(hashId(label), label, value, min, max); }
+
+    public void     text            (String text, float scale, FluxBillboard billboard) { this.text(hashId(text), text, scale, billboard); }
+    public void     text            (String text, float scale) { this.text(hashId(text), text, scale); }
+
+    public void     text            (String text, float scale, int opacity, FluxBillboard billboard) { this.text(hashId(text), text, scale, opacity, billboard); }
+    public void     text            (String text, float scale, int opacity) { this.text(hashId(text), text, scale, opacity); }
+
+    public void     text            (String text, float scale, int opacity, FluxTextAlignment align, FluxBillboard billboard) { this.text(hashId(text), text, scale, opacity, align, billboard); }
+    public void     text            (String text, float scale, int opacity, FluxTextAlignment align) { this.text(hashId(text), text, scale, opacity, align); }
+
+    public boolean  buttonAbs       (String text, float x, float y, FluxBillboard billboard) { return this.buttonAbs(hashId(text), text, x, y, billboard); }
+    public boolean  buttonAbs       (String text, float x, float y) { return this.buttonAbs(hashId(text), text, x, y); }
+
+    public boolean  checkboxAbs     (String label, boolean state, float x, float y, FluxBillboard billboard) { return this.checkboxAbs(hashId(label), label, state, x, y, billboard); }
+    public boolean  checkboxAbs     (String label, boolean state, float x, float y) { return this.checkboxAbs(hashId(label), label, state, x, y); }
+
+    public void     textAbs         (String text, float x, float y, float scale, int opacity, FluxTextAlignment align, FluxBillboard billboard) { this.textAbs(hashId(text), text, x, y, scale, opacity, align, billboard); }
+    public void     textAbs         (String text, float x, float y, float scale, int opacity, FluxTextAlignment align) { this.textAbs(hashId(text), text, x, y, scale, opacity, align); }
+
+    public float    sliderFloatAbs  (String label, float value, float min, float max, float x, float y, FluxBillboard billboard) { return this.sliderFloatAbs(hashId(label), label, value, min, max, x, y, billboard); }
+    public float    sliderFloatAbs  (String label, float value, float min, float max, float x, float y) { return this.sliderFloatAbs(hashId(label), label, value, min, max, x, y); }
+
     private String hashId(String text) {
         return text == null ? "null_id" : Integer.toHexString(text.hashCode());
     }

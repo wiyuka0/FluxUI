@@ -22,6 +22,9 @@ public final class FluxUI extends JavaPlugin {
         effectManager.registerEffect("test_layout", HelloWorldGUI::new);
         effectManager.registerEffect("simple_window", SimpleWindowGUI::new);
         effectManager.registerEffect("pathtracer", FluxCornellBoxEffect::new);
+        effectManager.registerEffect("rhythm", FluxRhythmGame::new);
+        effectManager.registerEffect("shield", ShatterShieldEffect::new);
+        effectManager.registerEffect("hud", PlayerHUD::new);
 
     }
 
