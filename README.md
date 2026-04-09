@@ -159,7 +159,7 @@ private void renderUI(Flux flux) {
 * `registerPlayerClick(UUID)`: 注册一次点击事件，触发按钮等控件的交互。
 
 ### 屏幕与上下文
-* `screen(FluxLocation, xAxis, yAxis, zAxis, id)`: 初始化一个 3D 屏幕的渲染上下文。
+* `screen(FluxLocation, xAxis, yAxis, zAxis, id)`: 初始化一个 3D 屏幕的渲染上下文。在FluxPocation中绑定指定玩家的UUID即可让该屏幕创建的实体骑到目标玩家头上。
 * `endScreen()`: 结束当前屏幕的渲染。
 * `area(id)` / `endArea()`: 逻辑分组，用于在循环或复杂结构中防止组件 ID 冲突。
 
@@ -210,7 +210,7 @@ show_demo_window = flux.checkbox("Demo Window", show_demo_window);
 f = flux.sliderFloat("float", f, 0.0f, 1.0f);
 if (flux.button("Button")) counter++;
 flux.sameLine();
-flux.text("b_cnt", "counter = " + counter);
+flux.text("counter = " + counter);
 flux.endWindow();
 ```
 
